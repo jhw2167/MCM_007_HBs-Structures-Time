@@ -43,7 +43,8 @@ public abstract class MixinChunkGenerator {
         CallbackInfo ci
     ) {
         //toDo implement call to structureManager
-        StructureManager.onTryGenerateStructure(structureEntry, chunk.
+        ChunkGenerator that = (ChunkGenerator) (Object) this;
+        StructureManager.onTryGenerateStructure(structureEntry,
     }
 
 
