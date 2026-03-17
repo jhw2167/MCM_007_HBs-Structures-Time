@@ -23,8 +23,11 @@ import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+import net.minecraft.world.level.saveddata.maps.StructureAccess;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.*;
@@ -103,7 +106,37 @@ public class StructureConceptManager {
     }
 
     // -------------------------------------------------------------------------
-    // Static entry point from mixin
+    // Public static inner class: StructureSetStartContext
+    // -------------------------------------------------------------------------
+
+    /**
+     * Holds all parameters passed from the MixinStructureManager injection,
+     * providing easy public access to each value.
+     */
+    public static class StructureSetStartContext {
+        public final SectionPos sectionPos;
+        public final Structure structure;
+        public final StructureStart structureStart;
+        public final StructureAccess structureAccess;
+        public final CallbackInfo ci;
+
+        public StructureSetStartContext(
+            SectionPos sectionPos,
+            Structure structure,
+            StructureStart structureStart,
+            StructureAccess structureAccess,
+            CallbackInfo ci
+        ) {
+            this.sectionPos = sectionPos;
+            this.structure = structure;
+            this.structureStart = structureStart;
+            this.structureAccess = structureAccess;
+            this.ci = ci;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Static entry point from MixinChunkGenerator
     // -------------------------------------------------------------------------
 
     /**
@@ -144,6 +177,45 @@ public class StructureConceptManager {
         LoggerProject.logDebug(CLASS_ID + "030",
             "tryGenerateStructure called for structure: " + structureName
             + " at chunk: " + ctx.chunkPos);
+    }
+
+    // -------------------------------------------------------------------------
+    // Static entry point from MixinStructureManager
+    // -------------------------------------------------------------------------
+
+    /**
+     * Called from MixinStructureManager when setStartForStructure is invoked.
+     * Iterates all managed ServerLevels and delegates to the instance handler.
+     */
+    public static void onSetStartForStructure(StructureSetStartContext ctx) {
+        for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
+            LevelAccessor levelAccessor = entry.getKey();
+            if (levelAccessor instanceof ServerLevel) {
+                entry.getValue().handleSetStartForStructure(ctx);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Handles the setStartForStructure event for this manager's level.
+     */
+    private void handleSetStartForStructure(StructureSetStartContext ctx) {
+        logStructureSetStart(ctx);
+        // TODO: Add further structure concept logic here
+    }
+
+    /**
+     * Logs the structure start being set.
+     */
+    private void logStructureSetStart(StructureSetStartContext ctx) {
+        String structureName = "unknown";
+        if (ctx.structure != null) {
+            structureName = ctx.structure.getClass().getSimpleName();
+        }
+        LoggerProject.logDebug(CLASS_ID + "031",
+            "setStartForStructure called for structure: " + structureName
+            + " at sectionPos: " + ctx.sectionPos);
     }
 
     // -------------------------------------------------------------------------
@@ -267,30 +339,4 @@ public class StructureConceptManager {
     }
 
     private static void onChunkLoadEvent(ChunkLoadingEvent.Load event) {
-        if (event.getLevel().isClientSide()) return;
-        StructureConceptManager manager = MANAGERS.get(event.getLevel());
-        if (manager != null) {
-            manager.onChunkLoad(event.getChunk());
-        }
-    }
-
-    private static void onChunkUnloadEvent(ChunkLoadingEvent.Unload event) {
-        if (event.getLevel().isClientSide()) return;
-        StructureConceptManager manager = MANAGERS.get(event.getLevel());
-        if (manager != null) {
-            manager.onChunkUnload(event.getChunk());
-        }
-    }
-
-    private static void onDailyTickEvent(ServerTickEvent event) {
-        for (StructureConceptManager manager : MANAGERS.values()) {
-            manager.onDailyTick();
-        }
-    }
-
-    private static void onDataSave(DatastoreSaveEvent event) {
-        for (StructureConceptManager manager : MANAGERS.values()) {
-            manager.save(event.getDataStore());
-        }
-    }
-}
+        if (event.getLevel().isClientS
