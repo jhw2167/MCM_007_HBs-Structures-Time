@@ -8,6 +8,7 @@ import com.holybuckets.foundation.event.custom.DatastoreSaveEvent;
 import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.event.custom.TickType;
 import com.holybuckets.structures.LoggerProject;
+import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.core.model.ManagedStructureConceptChunk;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.blay09.mods.balm.api.event.EventPriority;
@@ -125,7 +126,8 @@ public class StructureConceptManager {
     }
 
     /** Static initialization - subscribes static methods to events **/
-    public static void init(EventRegistrar reg) {
+    public static void init(EventRegistrar reg)
+    {
         reg.registerOnBeforeServerStarted(StructureConceptManager::onServerStart);
         reg.registerOnLevelLoad(StructureConceptManager::onLevelLoad, EventPriority.High);
         reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
@@ -141,6 +143,8 @@ public class StructureConceptManager {
 
     private static void onServerStart(ServerStartingEvent event) {
         MANAGERS.clear();
+        ManagedStructureConceptChunk.GENERAL_CONFIG = GeneralConfig.getInstance();
+        ManagedStructureConceptChunk.MOD_CONFIG = ModConfig.getInstance();
     }
 
     private static void onLevelLoad(LevelLoadingEvent.Load event) {

@@ -1,20 +1,18 @@
 package com.holybuckets.structures.core.model;
 
+import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.foundation.modelInterface.IMangedChunkData;
 import com.holybuckets.structures.LoggerProject;
+import com.holybuckets.structures.config.ModConfig;
+import com.holybuckets.structures.config.model.StructureConcept;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
-import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.levelgen.structure.Structure;
-
-import javax.annotation.Nullable;
 
 /**
  * Class: ManagedTimedStructureChunk
@@ -25,6 +23,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private static final String CLASS_ID = "010";
     private static final String NBT_KEY_HEADER = "managedTimedStructureChunk";
 
+    public static ModConfig MOD_CONFIG;
+    public static GeneralConfig GENERAL_CONFIG;
+
+
     public static void registerManagedChunkData() {
         ManagedChunk.registerManagedChunkData(ManagedStructureConceptChunk.class,
             () -> new ManagedStructureConceptChunk(null));
@@ -34,8 +36,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private LevelAccessor level;
     private String id;
     private ChunkPos pos;
-    private int progressionStage;
-    private Holder<Structure> structureHolder;
+    private int stage;
+    private StructureConcept structure;
 
     /** Constructors **/
 
@@ -45,8 +47,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.level = level;
         this.id = null;
         this.pos = null;
-        this.progressionStage = 0;
-        this.structureHolder = null;
+        this.stage = 0;
+        this.structure = null;
     }
 
     /** Constructor with id for a chunk that may not be loaded yet */
@@ -57,9 +59,9 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     }
 
     /** Full constructor with structure reference */
-    public ManagedStructureConceptChunk(LevelAccessor level, String id, Holder<Structure> structureHolder) {
+    public ManagedStructureConceptChunk(LevelAccessor level, String id, StructureConcept concept) {
         this(level, id);
-        this.structureHolder = structureHolder;
+        this.structure = concept;
     }
 
     /** Getters **/
@@ -76,20 +78,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         return level;
     }
 
-    public int getProgressionStage() {
-        return progressionStage;
-    }
-
-    public Holder<Structure> getStructureHolder() {
-        return structureHolder;
-    }
-
-    @Nullable
-    public ResourceLocation getStructureLocation() {
-        if (structureHolder == null) return null;
-        return structureHolder.unwrapKey()
-            .map(ResourceKey::location)
-            .orElse(null);
+    public int getstage() {
+        return stage;
     }
 
     public ManagedChunk getParent() {
@@ -110,13 +100,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.level = level;
     }
 
-    public void setProgressionStage(int stage) {
-        this.progressionStage = stage;
+    public void setstage(int stage) {
+        this.stage = stage;
     }
 
-    public void setStructureHolder(Holder<Structure> holder) {
-        this.structureHolder = holder;
-    }
 
     /** IMangedChunkData Overrides **/
 
@@ -148,13 +135,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public CompoundTag serializeNBT() {
         CompoundTag tag = new CompoundTag();
         tag.putString("id", this.id);
-        tag.putInt("progressionStage", this.progressionStage);
+        tag.putInt("stage", this.stage);
 
-        ResourceLocation structureLoc = getStructureLocation();
-        if (structureLoc != null) {
-            tag.putString("structure", structureLoc.toString());
-        } else {
-            tag.putString("structure", "");
+        if (structure != null) {
+            tag.putString("structure", structure.getStructureConceptId());
         }
 
         LoggerProject.logDebug(CLASS_ID + "001", "Serializing ManagedTimedStructureChunk: " + tag);
@@ -166,15 +150,11 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if (tag == null || tag.isEmpty()) return;
 
         this.pos = ChunkUtil.getChunkPos(this.id);
-        this.progressionStage = tag.getInt("progressionStage");
+        this.stage = tag.getInt("stage");
 
-        String structureStr = tag.getString("structure");
-        if (structureStr != null && !structureStr.isEmpty()) {
-            // Structure holder will be resolved by the manager after deserialization
-            // since we need registry access which requires a ServerLevel
-            LoggerProject.logDebug(CLASS_ID + "002",
-                "Deserialized ManagedTimedStructureChunk " + this.id
-                + " with structure: " + structureStr + " stage: " + this.progressionStage);
+        String conceptId = tag.getString("structure");
+        if (conceptId != null && !conceptId.isEmpty()) {
+            this.structure = MOD_CONFIG.getConcept(conceptId);
         }
     }
 

@@ -2,7 +2,7 @@ package com.holybuckets.structures;
 
 
 import com.holybuckets.foundation.event.EventRegistrar;
-import com.holybuckets.structures.config.HBStructuresModConfig;
+import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.StructuresTimeConfig;
 import com.holybuckets.structures.core.StructureConceptManager;
 import net.blay09.mods.balm.api.Balm;
@@ -41,7 +41,7 @@ public class StructuresOverTimeMain {
         //ChallengeBlockBehavior.init(registrar);
 
         //Configs
-        HBStructuresModConfig.init(registrar);
+        ModConfig.init(registrar);
 
         //Managers
         StructureConceptManager.init(registrar);

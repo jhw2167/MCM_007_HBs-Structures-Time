@@ -9,6 +9,7 @@
     "client": [
     ],
     "server": [
+        "MixinChunkGenerator"
     ],
     "injectors": {
         "defaultRequire": 1

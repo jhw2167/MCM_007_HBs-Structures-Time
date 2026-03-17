@@ -3,6 +3,9 @@ package com.holybuckets.structures.config.model;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.levelgen.structure.Structure;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -15,19 +18,25 @@ import java.util.List;
  * A concept defines a progression of Minecraft structures that can evolve
  * through stages over time (e.g. a witch hut → village → pillager outpost).
  *
+ * sourceStructureId identifies which vanilla/modded structure triggers this
+ * concept during worldgen (e.g. "minecraft:village_plains"). When that
+ * structure is intercepted in tryGenerateStructure, the chunk is flagged
+ * as belonging to this concept.
+ *
+ * Stages are indexed from 1 (canvas0 has no structures; canvas1 holds stage 1, etc.).
  */
 public class StructureConcept {
 
-
-   
     public static class StructureConceptStage {
 
         private final int stage;
         private final String structureId;
+        private ResourceLocation structureHolder;
 
         public StructureConceptStage(int stage, String structureId) {
             this.stage = stage;
             this.structureId = (structureId == null) ? "" : structureId;
+            this.structureHolder = null;
         }
 
         // -- Getters --
@@ -40,6 +49,11 @@ public class StructureConcept {
             return structureId;
         }
 
+        @Nullable
+        public ResourceLocation getStructureHolder() {
+            return structureHolder;
+        }
+
         /** Returns true if this stage has an actual structure to place. */
         public boolean hasStructure() {
             return !structureId.isEmpty() && !structureId.equalsIgnoreCase("empty");
@@ -48,6 +62,13 @@ public class StructureConcept {
         /** Returns true if this stage explicitly removes / leaves empty. */
         public boolean isEmpty() {
             return structureId.isEmpty() || structureId.equalsIgnoreCase("empty");
+        }
+
+        // -- Registry resolution --
+
+        /** Set the resolved Holder after registry lookup in ModConfig. */
+        public void setStructureHolder(ResourceLocation holder) {
+            this.structureHolder = holder;
         }
 
         // -- Serialization --
@@ -60,7 +81,7 @@ public class StructureConcept {
         }
 
         public static StructureConceptStage deserialize(JsonObject obj) {
-            int stage       = obj.has("stage")       ? obj.get("stage").getAsInt()        : 0;
+            int stage       = obj.has("stage")       ? obj.get("stage").getAsInt()         : 1;
             String structId = obj.has("structureId") ? obj.get("structureId").getAsString() : "";
             return new StructureConceptStage(stage, structId);
         }
@@ -68,13 +89,19 @@ public class StructureConcept {
 
 
     private final String structureConceptId;
+    private final String sourceStructureId;
     private final String comments;
     private final List<StructureConceptStage> stages;
 
-    public StructureConcept(String structureConceptId, String comments, List<StructureConceptStage> stages) {
+    private ResourceLocation sourceStructure;
+
+    public StructureConcept(String structureConceptId, String sourceStructureId,
+                            String comments, List<StructureConceptStage> stages) {
         this.structureConceptId = structureConceptId;
+        this.sourceStructureId  = (sourceStructureId == null) ? "" : sourceStructureId;
         this.comments           = (comments == null) ? "" : comments;
         this.stages             = (stages == null) ? new ArrayList<>() : new ArrayList<>(stages);
+        this.sourceStructure    = null;
     }
 
 
@@ -82,8 +109,22 @@ public class StructureConcept {
         return structureConceptId;
     }
 
+    public String getSourceStructureId() {
+        return sourceStructureId;
+    }
+
     public String getComments() {
         return comments;
+    }
+
+    @Nullable
+    public ResourceLocation getSourceStructure() {
+        return sourceStructure;
+    }
+
+    /** Set the resolved source Holder after registry lookup in ModConfig. */
+    public void setSourceStructure(ResourceLocation sourceStructure) {
+        this.sourceStructure = sourceStructure;
     }
 
     /** Returns an unmodifiable view of this concept's stages, in definition order. */
@@ -96,29 +137,48 @@ public class StructureConcept {
         return stages.size();
     }
 
-    /**
-     * Returns the stage entry at the given ordinal, or null if out of range.
-     */
-    @Nullable
-    public StructureConceptStage getStage(int stageIndex) {
-        if (stageIndex < 0 || stageIndex >= stages.size()) return null;
-        return stages.get(stageIndex);
+    /** Returns the highest stage index defined in this concept. */
+    public int getMaxStage() {
+        int max = 0;
+        for (StructureConceptStage s : stages) {
+            if (s.getStage() > max) max = s.getStage();
+        }
+        return max;
     }
 
     /**
-     * Returns the structureId for the given stage ordinal, or null if the stage
-     * does not exist.
+     * Returns the stage entry matching the given stage number, or null if not defined.
+     * Stage numbers are 1-indexed (stage 1 = canvas1, stage 2 = canvas2, etc.).
      */
     @Nullable
-    public String getStructureIdForStage(int stageIndex) {
-        StructureConceptStage s = getStage(stageIndex);
+    public StructureConceptStage getStage(int stageNumber) {
+        for (StructureConceptStage s : stages) {
+            if (s.getStage() == stageNumber) return s;
+        }
+        return null;
+    }
+
+    /**
+     * Returns the structureId for the given stage number, or null if the stage
+     * does not exist. Stage numbers are 1-indexed.
+     */
+    @Nullable
+    public String getStructureIdForStage(int stageNumber) {
+        StructureConceptStage s = getStage(stageNumber);
         return (s == null) ? null : s.getStructureId();
     }
 
+    /** Removes a stage from this concept's mutable internal list. */
+    public boolean removeStage(int stageNumber) {
+        return stages.removeIf(s -> s.getStage() == stageNumber);
+    }
+
+    // -- Serialization --
 
     public JsonObject serialize() {
         JsonObject obj = new JsonObject();
         obj.addProperty("structureConceptId", structureConceptId);
+        obj.addProperty("sourceStructureId", sourceStructureId);
         obj.addProperty("comments", comments);
 
         JsonArray stagesArray = new JsonArray();
@@ -130,12 +190,11 @@ public class StructureConcept {
         return obj;
     }
 
-    /**
-     * Deserializes a StructureConcept from a JsonObject.
-     */
     public static StructureConcept deserialize(JsonObject obj) {
         String conceptId = obj.has("structureConceptId")
             ? obj.get("structureConceptId").getAsString() : "";
+        String sourceId  = obj.has("sourceStructureId")
+            ? obj.get("sourceStructureId").getAsString() : "";
         String comments  = obj.has("comments")
             ? obj.get("comments").getAsString() : "";
 
@@ -149,6 +208,6 @@ public class StructureConcept {
             }
         }
 
-        return new StructureConcept(conceptId, comments, stages);
+        return new StructureConcept(conceptId, sourceId, comments, stages);
     }
 }
