@@ -14,17 +14,25 @@ import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.LevelLoadingEvent;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.*;
 
 /**
- * Class: TimedStructureManager
+ * Class: StructureConceptManager
  * Description: Manages timed structures for a single ServerLevel.
- * Each instance is 1:1 with a ServerLevel. Tracks ManagedTimedStructureChunk
+ * Each instance is 1:1 with a ServerLevel. Tracks ManagedStructureConceptChunk
  * objects (max 1 per chunk) on chunk load/unload events.
  *
  * Currently initialized only for the Overworld, but designed to support
@@ -49,7 +57,102 @@ public class StructureConceptManager {
         LoggerProject.logInit(CLASS_ID + "000", StructureConceptManager.class.getName());
     }
 
-    /** Getters **/
+    // -------------------------------------------------------------------------
+    // Public static inner class: StructureGenerateContext
+    // -------------------------------------------------------------------------
+
+    /**
+     * Holds all parameters passed from the MixinChunkGenerator injection,
+     * providing easy public access to each value.
+     */
+    public static class StructureGenerateContext {
+        public final StructureSet.StructureSelectionEntry structureEntry;
+        public final StructureManager structureManager;
+        public final RegistryAccess registryAccess;
+        public final RandomState randomState;
+        public final StructureTemplateManager structureTemplateManager;
+        public final long seed;
+        public final ChunkAccess chunk;
+        public final ChunkPos chunkPos;
+        public final SectionPos sectionPos;
+        public final CallbackInfo ci;
+
+        public StructureGenerateContext(
+            StructureSet.StructureSelectionEntry structureEntry,
+            StructureManager structureManager,
+            RegistryAccess registryAccess,
+            RandomState randomState,
+            StructureTemplateManager structureTemplateManager,
+            long seed,
+            ChunkAccess chunk,
+            ChunkPos chunkPos,
+            SectionPos sectionPos,
+            CallbackInfo ci
+        ) {
+            this.structureEntry = structureEntry;
+            this.structureManager = structureManager;
+            this.registryAccess = registryAccess;
+            this.randomState = randomState;
+            this.structureTemplateManager = structureTemplateManager;
+            this.seed = seed;
+            this.chunk = chunk;
+            this.chunkPos = chunkPos;
+            this.sectionPos = sectionPos;
+            this.ci = ci;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Static entry point from mixin
+    // -------------------------------------------------------------------------
+
+    /**
+     * Called from MixinChunkGenerator. Finds the correct StructureConceptManager
+     * by matching the context's registryAccess to each managed ServerLevel's
+     * registryAccess, then delegates to the instance handler.
+     */
+    public static void onTryGenerateStructure(StructureGenerateContext ctx) {
+        for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
+            LevelAccessor levelAccessor = entry.getKey();
+            if (levelAccessor instanceof ServerLevel serverLevel) {
+                if (serverLevel.registryAccess() == ctx.registryAccess) {
+                    entry.getValue().handleTryGenerateStructure(ctx);
+                    return;
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Instance handler
+    // -------------------------------------------------------------------------
+
+    /**
+     * Handles the tryGenerateStructure event for this manager's level.
+     */
+    private void handleTryGenerateStructure(StructureGenerateContext ctx) {
+        logStructurePlacement(ctx);
+        // TODO: Add further structure concept logic here
+    }
+
+    /**
+     * Logs the structure that is attempting to be placed.
+     */
+    private void logStructurePlacement(StructureGenerateContext ctx) {
+        String structureName = "unknown";
+        if (ctx.structureEntry != null && ctx.structureEntry.structure() != null) {
+            structureName = ctx.structureEntry.structure().unwrapKey()
+                .map(key -> key.location().toString())
+                .orElse("unknown");
+        }
+        LoggerProject.logDebug(CLASS_ID + "030",
+            "tryGenerateStructure called for structure: " + structureName
+            + " at chunk: " + ctx.chunkPos);
+    }
+
+    // -------------------------------------------------------------------------
+    // Getters
+    // -------------------------------------------------------------------------
 
     public ServerLevel getLevel() {
         return level;
@@ -67,12 +170,13 @@ public class StructureConceptManager {
         return MANAGERS.get(level);
     }
 
-    /** Instance event handlers **/
+    // -------------------------------------------------------------------------
+    // Instance event handlers
+    // -------------------------------------------------------------------------
 
     private void onChunkLoad(ChunkAccess chunk) {
         String chunkId = ChunkUtil.getId(chunk.getPos());
 
-        // Only track chunks that already have a ManagedTimedStructureChunk registered
         if (managedChunks.containsKey(chunkId)) {
             ManagedStructureConceptChunk managed = managedChunks.get(chunkId);
             managed.setLevel(level);
@@ -91,9 +195,9 @@ public class StructureConceptManager {
     }
 
     /**
-     * Registers a new ManagedTimedStructureChunk for the given chunk id.
-     * Only one ManagedTimedStructureChunk per chunk is allowed.
-     * @return the existing or newly registered ManagedTimedStructureChunk
+     * Registers a new ManagedStructureConceptChunk for the given chunk id.
+     * Only one ManagedStructureConceptChunk per chunk is allowed.
+     * @return the existing or newly registered ManagedStructureConceptChunk
      */
     public ManagedStructureConceptChunk registerManagedChunk(ManagedStructureConceptChunk managed) {
         String chunkId = managed.getId();
@@ -110,12 +214,17 @@ public class StructureConceptManager {
         managedChunks.remove(chunkId);
     }
 
-    /** Daily tick handler - called once per in-game day **/
+    // -------------------------------------------------------------------------
+    // Daily tick handler
+    // -------------------------------------------------------------------------
+
     private void onDailyTick() {
         // TODO: Implement daily progression logic
     }
 
-    /** Persistence **/
+    // -------------------------------------------------------------------------
+    // Persistence
+    // -------------------------------------------------------------------------
 
     private void load(DataStore ds) {
         // TODO: Load managed timed structure chunks from datastore
@@ -125,21 +234,25 @@ public class StructureConceptManager {
         // TODO: Save managed timed structure chunks to datastore
     }
 
+    // -------------------------------------------------------------------------
+    // Static initialization
+    // -------------------------------------------------------------------------
+
     /** Static initialization - subscribes static methods to events **/
-    public static void init(EventRegistrar reg)
-    {
+    public static void init(EventRegistrar reg) {
         reg.registerOnBeforeServerStarted(StructureConceptManager::onServerStart);
         reg.registerOnLevelLoad(StructureConceptManager::onLevelLoad, EventPriority.High);
         reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
         reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
-        // Daily tick: ON_24000_TICKS is ideal (1 MC day), update if TickType supports it
         reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::onDailyTickEvent);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
 
         ManagedStructureConceptChunk.registerManagedChunkData();
     }
 
-    /** Static event handlers **/
+    // -------------------------------------------------------------------------
+    // Static event handlers
+    // -------------------------------------------------------------------------
 
     private static void onServerStart(ServerStartingEvent event) {
         MANAGERS.clear();
@@ -150,7 +263,6 @@ public class StructureConceptManager {
     private static void onLevelLoad(LevelLoadingEvent.Load event) {
         if (event.getLevel().isClientSide()) return;
 
-        // Only initialize for the Overworld for now
         ServerLevel serverLevel = (ServerLevel) event.getLevel();
         if (!serverLevel.dimension().equals(Level.OVERWORLD)) return;
 

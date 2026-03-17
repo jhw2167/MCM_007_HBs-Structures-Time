@@ -2,16 +2,13 @@ package com.holybuckets.structures.mixin;
 
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.core.StructureConceptManager;
-import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.RandomState;
-import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,7 +20,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MixinChunkGenerator {
 
     private static final String CLASS_ID = "020";
-
 
     @Inject(
         method = "tryGenerateStructure",
@@ -42,10 +38,21 @@ public abstract class MixinChunkGenerator {
         SectionPos sectionPos,
         CallbackInfo ci
     ) {
-        //toDo implement call to structureManager
-        ChunkGenerator that = (ChunkGenerator) (Object) this;
-        StructureManager.onTryGenerateStructure(structureEntry,
-    }
+        StructureConceptManager.StructureGenerateContext ctx =
+            new StructureConceptManager.StructureGenerateContext(
+                structureEntry,
+                structureManager,
+                registryAccess,
+                randomState,
+                structureTemplateManager,
+                seed,
+                chunk,
+                chunkPos,
+                sectionPos,
+                ci
+            );
 
+        StructureConceptManager.onTryGenerateStructure(ctx);
+    }
 
 }
