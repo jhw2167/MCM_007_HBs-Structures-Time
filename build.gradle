@@ -1,0 +1,163 @@
+plugins {
+    id 'fabric-loom' version "${loom_version}" apply(false)
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)' apply(false)
+    id 'org.spongepowered.gradle.vanilla' version '0.2.1-SNAPSHOT' apply(false)
+    id("org.spongepowered.mixin") version "0.7-SNAPSHOT" apply(false)
+}
+
+allprojects {
+    apply plugin: "idea"
+
+    tasks.withType(Javadoc).configureEach {
+        options.addStringOption('Xdoclint:none', '-quiet') // Suppress all warnings
+        options.encoding = 'UTF-8' // Set proper encoding
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+
+    java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+    java.withSourcesJar()
+    java.withJavadocJar()
+        
+    jar {
+        from(rootProject.file("LICENSE")) {
+            rename { "${it}_${mod_name}" }
+        }
+        manifest {
+            attributes([
+                'Specification-Title'     : mod_name,
+                'Specification-Vendor'    : mod_author,
+                'Specification-Version'   : project.jar.archiveVersion,
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_author,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'Timestamp'               : System.currentTimeMillis(),
+                'Built-On-Java'           : "${System.getProperty('java.vm.version')} (${System.getProperty('java.vm.vendor')})",
+                'Built-On-Minecraft'      : minecraft_version
+            ])
+        }
+    }
+
+    sourcesJar {
+        from(rootProject.file("LICENSE")) {
+            rename { "${it}_${mod_name}" }
+        }
+    }
+
+    repositories {
+         mavenLocal()
+        mavenCentral()
+        maven { url "https://api.modrinth.com/maven" }
+        maven { url 'https://maven.minecraftforge.net' }
+        maven { url 'https://cursemaven.com' }
+
+        repositories {
+            maven { url 'https://maven.nucleoid.xyz' }
+        }
+        maven {
+            name 'Fabric'
+            url 'https://maven.fabricmc.net/'
+        }
+        maven {
+            name = 'Sponge / Mixin'
+            url = 'https://repo.spongepowered.org/repository/maven-public/'
+        }
+        maven {
+            name = 'BlameJared Maven (JEI / CraftTweaker / Bookshelf)'
+            url = 'https://maven.blamejared.com'
+        }
+        maven {
+            name = 'JitPack'
+            url = 'https://jitpack.io'
+        }
+        maven {
+            url "https://maven.twelveiterations.com/repository/maven-public/"
+            content {
+                includeGroup "net.blay09.mods"
+            }
+        }
+        maven { url 'https://hephaestus.dev/release' }
+        maven { url 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/' }
+        maven { url 'https://maven.shedaniel.me' }
+        maven { url 'https://maven.fabricmc.net/io/github/prospector/modmenu' }
+        maven { url 'https://maven.terraformersmc.com/releases/' }
+
+        maven { url 'https://maven.nucleoid.xyz' }
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
+        maven { url 'https://api.modrinth.com/maven' }
+        maven { url 'https://jitpack.io' }
+        maven { url "https://maven.shedaniel.me/" }
+        maven {
+            name = "TerraformersMC"
+            url = "https://maven.terraformersmc.com/"
+        }
+
+        maven {
+            name = "Ladysnake Libs"
+            url = "https://maven.ladysnake.org/releases"
+        }
+
+        flatDir {
+            dirs './modsWithCompat'
+        }
+
+        maven {
+            name 'Gegy'
+            url 'https://maven.gegy.dev'
+        }
+
+        maven { url "https://maven.wispforest.io/releases" }
+        maven{ ( url "https://maven.createmod.net" ) }
+        maven{ ( url "https://mvn.devos.one/snapshots/" ) } // Create Fabric
+        maven{ ( url "https://mvn.devos.one/releases/" ) } // Porting Lib
+        maven{ ( url "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/" ) } // Forge Config API Port
+        maven{ ( url "https://maven.jamieswhiteshirt.com/libs-release" ) } // Reach Entity Attributes
+        maven { url "https://maven.tterrag.com/" } // Flywheel on both, Create and Registrate on forge
+    }
+
+    dependencies {
+        //custom
+        implementation "com.google.code.gson:gson:${gson_version}"
+        implementation "org.antlr:antlr4-runtime:${antlr_version}"
+        implementation "org.xerial:sqlite-jdbc:${sqlite_version}"
+
+        //Common (mojmap): implementation "net.blay09.mods:balm-common:${balm_version}"
+        //Forge: implementation fg.deobf("net.blay09.mods:balm-forge:${balm_version}")
+        //Fabric: modImplementation "net.blay09.mods:balm-fabric:${balm_version}"
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        it.options.encoding = 'UTF-8'
+    }
+
+    processResources {
+        def expandProps = [
+                "version": mod_version,
+                "group": project.group, //Else we target the task's group.
+                "minecraft_version": minecraft_version,
+                "forge_version": forge_version,
+                "forge_loader_version_range": forge_loader_version_range,
+                "forge_version_range": forge_version_range,
+                "minecraft_version_range": minecraft_version_range,
+                "fabric_version": fabric_version,
+                "fabric_loader_version": fabric_loader_version,
+                "mod_name": mod_name,
+                "mod_author": mod_author,
+                "mod_id": mod_id,
+                "license": license,
+                "description": project.description,
+                "balm_version": project.balm_version,
+                "balm_version_range": project.balm_version_range,
+                "foundation_version": project.foundation_version,
+                "create_version": project.create_version
+        ]
+
+        filesMatching(['pack.mcmeta', 'fabric.mod.json', 'META-INF/mods.toml', '*.mixins.json']) {
+            expand expandProps
+        }
+        inputs.properties(expandProps)
+    }
+}

@@ -1,0 +1,42 @@
+{
+    "schemaVersion": 1,
+    "id": "${mod_id}",
+    "version": "${version}",
+    "name": "${mod_name}",
+    "description": "${description}",
+    "authors": [
+        "${mod_author}"
+    ],
+    "contact": {
+        "homepage": "https://discord.gg/dp9d4wymNv",
+        "sources": "https://github.com/FabricMC/fabric-example-mod"
+    },
+    "license": "${license}",
+    "icon": "icon.png",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "com.holybuckets.structures.StructuresOverTimeMainFabric"
+        ],
+        "client": [
+            "com.holybuckets.structures.StructuresOverTimeMainFabricClient"
+        ]
+    },
+    "mixins": [
+        "${mod_id}.mixins.json",
+        "${mod_id}.fabric.mixins.json"
+    ],
+    "depends": {
+        "fabricloader": ">=0.14",
+        "fabric": "*",
+        "minecraft": "${minecraft_version}",
+        "java": ">=17",
+        "balm-fabric": ">=${balm_version}",
+        "hbs_foundation": ">=${foundation_version}",
+        "create": ">=${create_version}"
+    },
+    "suggests": {
+        "another-mod": "*"
+    }
+}
+  
