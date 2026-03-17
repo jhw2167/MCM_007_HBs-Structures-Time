@@ -3,6 +3,7 @@ package com.holybuckets.structures;
 import com.holybuckets.foundation.event.BalmEventRegister;
 import com.holybuckets.structures.block.ModBlocks;
 import com.holybuckets.structures.block.be.ModBlockEntities;
+import com.holybuckets.structures.config.StructuresTimeConfig;
 import com.holybuckets.structures.item.ModItems;
 import com.holybuckets.structures.menu.ModMenus;
 import com.holybuckets.structures.platform.Services;
@@ -30,7 +31,7 @@ public class CommonClass {
         }
 
         //RegisterConfigs
-        //Balm.getConfig().registerConfig(ChallengeTempleConfig.class);
+        Balm.getConfig().registerConfig(StructuresTimeConfig.class);
         StructuresOverTimeMain.INSTANCE = new StructuresOverTimeMain();
         BalmEventRegister.registerEvents();
         BalmEventRegister.registerCommands();

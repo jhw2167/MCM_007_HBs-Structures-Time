@@ -2,10 +2,10 @@ package com.holybuckets.structures;
 
 
 import com.holybuckets.foundation.event.EventRegistrar;
-import com.holybuckets.structures.config.TemplateConfig;
-import com.holybuckets.structures.core.TimedStructureManager;
+import com.holybuckets.structures.config.HBStructuresModConfig;
+import com.holybuckets.structures.config.StructuresTimeConfig;
+import com.holybuckets.structures.core.StructureConceptManager;
 import net.blay09.mods.balm.api.Balm;
-import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
 
 /**
@@ -14,7 +14,7 @@ import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
  */
 public class StructuresOverTimeMain {
     private static boolean DEV_MODE = false;;
-    private static TemplateConfig CONFIG;
+    private static StructuresTimeConfig CONFIG;
     public static StructuresOverTimeMain INSTANCE;
 
     public StructuresOverTimeMain()
@@ -40,8 +40,11 @@ public class StructuresOverTimeMain {
         EventRegistrar registrar = EventRegistrar.getInstance();
         //ChallengeBlockBehavior.init(registrar);
 
+        //Configs
+        HBStructuresModConfig.init(registrar);
+
         //Managers
-        TimedStructureManager.init(registrar);
+        StructureConceptManager.init(registrar);
 
         //register local events
         registrar.registerOnBeforeServerStarted(this::onServerStarting);
@@ -49,7 +52,7 @@ public class StructuresOverTimeMain {
     }
 
     private void onServerStarting(ServerStartingEvent e) {
-        CONFIG = Balm.getConfig().getActiveConfig(TemplateConfig.class);
+        CONFIG = Balm.getConfig().getActiveConfig(StructuresTimeConfig.class);
         //this.DEV_MODE = CONFIG.devMode;
         this.DEV_MODE = false;
     }

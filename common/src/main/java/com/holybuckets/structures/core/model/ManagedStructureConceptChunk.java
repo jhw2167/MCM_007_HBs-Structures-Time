@@ -1,6 +1,5 @@
 package com.holybuckets.structures.core.model;
 
-import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
@@ -19,20 +18,16 @@ import javax.annotation.Nullable;
 
 /**
  * Class: ManagedTimedStructureChunk
- * Description: Represents a single chunk that contains a timed structure.
- * Each instance is 1:1 with a ManagedChunk and registers as a managed chunk subclass.
- *
- * Tracks the current stage of progression for the structure in this chunk
- * and holds a reference to the Structure registry entry.
+ * Description: Represents a single chunk that contains a structure that changes over time.
  */
-public class ManagedTimedStructureChunk implements IMangedChunkData {
+public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     private static final String CLASS_ID = "010";
     private static final String NBT_KEY_HEADER = "managedTimedStructureChunk";
 
     public static void registerManagedChunkData() {
-        ManagedChunk.registerManagedChunkData(ManagedTimedStructureChunk.class,
-            () -> new ManagedTimedStructureChunk(null));
+        ManagedChunk.registerManagedChunkData(ManagedStructureConceptChunk.class,
+            () -> new ManagedStructureConceptChunk(null));
     }
 
     /** Variables **/
@@ -45,7 +40,7 @@ public class ManagedTimedStructureChunk implements IMangedChunkData {
     /** Constructors **/
 
     /** Default constructor - creates dummy node for deserialization */
-    private ManagedTimedStructureChunk(LevelAccessor level) {
+    private ManagedStructureConceptChunk(LevelAccessor level) {
         super();
         this.level = level;
         this.id = null;
@@ -55,14 +50,14 @@ public class ManagedTimedStructureChunk implements IMangedChunkData {
     }
 
     /** Constructor with id for a chunk that may not be loaded yet */
-    private ManagedTimedStructureChunk(LevelAccessor level, String id) {
+    private ManagedStructureConceptChunk(LevelAccessor level, String id) {
         this(level);
         this.setId(id);
         this.pos = ChunkUtil.getChunkPos(id);
     }
 
     /** Full constructor with structure reference */
-    public ManagedTimedStructureChunk(LevelAccessor level, String id, Holder<Structure> structureHolder) {
+    public ManagedStructureConceptChunk(LevelAccessor level, String id, Holder<Structure> structureHolder) {
         this(level, id);
         this.structureHolder = structureHolder;
     }
@@ -98,7 +93,7 @@ public class ManagedTimedStructureChunk implements IMangedChunkData {
     }
 
     public ManagedChunk getParent() {
-        return ManagedTimedStructureChunk.getParent(level, id);
+        return ManagedStructureConceptChunk.getParent(level, id);
     }
 
     /** Setters **/
@@ -126,14 +121,14 @@ public class ManagedTimedStructureChunk implements IMangedChunkData {
     /** IMangedChunkData Overrides **/
 
     @Override
-    public ManagedTimedStructureChunk getStaticInstance(LevelAccessor level, String id) {
+    public ManagedStructureConceptChunk getStaticInstance(LevelAccessor level, String id) {
         if (id == null || level == null) return null;
-        return ManagedTimedStructureChunk.getInstance(level, id);
+        return ManagedStructureConceptChunk.getInstance(level, id);
     }
 
     @Override
     public boolean isInit(String subClass) {
-        return subClass.equals(ManagedTimedStructureChunk.class.getName()) && this.id != null;
+        return subClass.equals(ManagedStructureConceptChunk.class.getName()) && this.id != null;
     }
 
     @Override
@@ -185,14 +180,14 @@ public class ManagedTimedStructureChunk implements IMangedChunkData {
 
     /** Static Methods **/
 
-    public static ManagedTimedStructureChunk getInstance(LevelAccessor level, String id) {
+    public static ManagedStructureConceptChunk getInstance(LevelAccessor level, String id) {
         ManagedChunk parent = getParent(level, id);
         if (parent == null)
-            return new ManagedTimedStructureChunk(level, id);
+            return new ManagedStructureConceptChunk(level, id);
 
-        ManagedTimedStructureChunk c = (ManagedTimedStructureChunk) parent.getSubclass(ManagedTimedStructureChunk.class);
+        ManagedStructureConceptChunk c = (ManagedStructureConceptChunk) parent.getSubclass(ManagedStructureConceptChunk.class);
         if (c == null)
-            return new ManagedTimedStructureChunk(level, id);
+            return new ManagedStructureConceptChunk(level, id);
 
         return c;
     }

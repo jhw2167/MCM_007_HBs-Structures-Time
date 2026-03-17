@@ -1,17 +1,14 @@
 package com.holybuckets.structures.core;
 
 import com.holybuckets.foundation.GeneralConfig;
-import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.foundation.datastore.DataStore;
 import com.holybuckets.foundation.event.EventRegistrar;
 import com.holybuckets.foundation.event.custom.DatastoreSaveEvent;
 import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.event.custom.TickType;
-import com.holybuckets.foundation.model.ManagedChunk;
-import com.holybuckets.structures.Constants;
 import com.holybuckets.structures.LoggerProject;
-import com.holybuckets.structures.core.model.ManagedTimedStructureChunk;
+import com.holybuckets.structures.core.model.ManagedStructureConceptChunk;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.LevelLoadingEvent;
@@ -32,23 +29,23 @@ import java.util.*;
  * Currently initialized only for the Overworld, but designed to support
  * other dimensions in the future.
  */
-public class TimedStructureManager {
+public class StructureConceptManager {
 
     public static final String CLASS_ID = "011";
 
     /** Static manager map and state **/
-    private static Map<LevelAccessor, TimedStructureManager> MANAGERS = new HashMap<>();
+    private static Map<LevelAccessor, StructureConceptManager> MANAGERS = new HashMap<>();
 
     /** Instance fields **/
     private final ServerLevel level;
-    private final Map<String, ManagedTimedStructureChunk> managedChunks;
+    private final Map<String, ManagedStructureConceptChunk> managedChunks;
 
     /** Constructor **/
-    private TimedStructureManager(ServerLevel level) {
+    private StructureConceptManager(ServerLevel level) {
         this.level = level;
         this.managedChunks = new HashMap<>();
         MANAGERS.put(level, this);
-        LoggerProject.logInit(CLASS_ID + "000", TimedStructureManager.class.getName());
+        LoggerProject.logInit(CLASS_ID + "000", StructureConceptManager.class.getName());
     }
 
     /** Getters **/
@@ -57,15 +54,15 @@ public class TimedStructureManager {
         return level;
     }
 
-    public Map<String, ManagedTimedStructureChunk> getManagedChunks() {
+    public Map<String, ManagedStructureConceptChunk> getManagedChunks() {
         return Collections.unmodifiableMap(managedChunks);
     }
 
-    public ManagedTimedStructureChunk getManagedChunk(String chunkId) {
+    public ManagedStructureConceptChunk getManagedChunk(String chunkId) {
         return managedChunks.get(chunkId);
     }
 
-    public static TimedStructureManager get(LevelAccessor level) {
+    public static StructureConceptManager get(LevelAccessor level) {
         return MANAGERS.get(level);
     }
 
@@ -76,7 +73,7 @@ public class TimedStructureManager {
 
         // Only track chunks that already have a ManagedTimedStructureChunk registered
         if (managedChunks.containsKey(chunkId)) {
-            ManagedTimedStructureChunk managed = managedChunks.get(chunkId);
+            ManagedStructureConceptChunk managed = managedChunks.get(chunkId);
             managed.setLevel(level);
             LoggerProject.logDebug(CLASS_ID + "010",
                 "Chunk loaded with timed structure: " + chunkId);
@@ -97,7 +94,7 @@ public class TimedStructureManager {
      * Only one ManagedTimedStructureChunk per chunk is allowed.
      * @return the existing or newly registered ManagedTimedStructureChunk
      */
-    public ManagedTimedStructureChunk registerManagedChunk(ManagedTimedStructureChunk managed) {
+    public ManagedStructureConceptChunk registerManagedChunk(ManagedStructureConceptChunk managed) {
         String chunkId = managed.getId();
         if (managedChunks.containsKey(chunkId)) {
             return managedChunks.get(chunkId);
@@ -129,15 +126,15 @@ public class TimedStructureManager {
 
     /** Static initialization - subscribes static methods to events **/
     public static void init(EventRegistrar reg) {
-        reg.registerOnBeforeServerStarted(TimedStructureManager::onServerStart);
-        reg.registerOnLevelLoad(TimedStructureManager::onLevelLoad, EventPriority.High);
-        reg.registerOnChunkLoad(TimedStructureManager::onChunkLoadEvent);
-        reg.registerOnChunkUnload(TimedStructureManager::onChunkUnloadEvent);
+        reg.registerOnBeforeServerStarted(StructureConceptManager::onServerStart);
+        reg.registerOnLevelLoad(StructureConceptManager::onLevelLoad, EventPriority.High);
+        reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
+        reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
         // Daily tick: ON_24000_TICKS is ideal (1 MC day), update if TickType supports it
-        reg.registerOnServerTick(TickType.ON_1200_TICKS, TimedStructureManager::onDailyTickEvent);
-        reg.registerOnDataSave(TimedStructureManager::onDataSave);
+        reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::onDailyTickEvent);
+        reg.registerOnDataSave(StructureConceptManager::onDataSave);
 
-        ManagedTimedStructureChunk.registerManagedChunkData();
+        ManagedStructureConceptChunk.registerManagedChunkData();
     }
 
     /** Static event handlers **/
@@ -153,13 +150,13 @@ public class TimedStructureManager {
         ServerLevel serverLevel = (ServerLevel) event.getLevel();
         if (!serverLevel.dimension().equals(Level.OVERWORLD)) return;
 
-        TimedStructureManager manager = new TimedStructureManager(serverLevel);
+        StructureConceptManager manager = new StructureConceptManager(serverLevel);
         manager.load(GeneralConfig.getInstance().getDataStore());
     }
 
     private static void onChunkLoadEvent(ChunkLoadingEvent.Load event) {
         if (event.getLevel().isClientSide()) return;
-        TimedStructureManager manager = MANAGERS.get(event.getLevel());
+        StructureConceptManager manager = MANAGERS.get(event.getLevel());
         if (manager != null) {
             manager.onChunkLoad(event.getChunk());
         }
@@ -167,20 +164,20 @@ public class TimedStructureManager {
 
     private static void onChunkUnloadEvent(ChunkLoadingEvent.Unload event) {
         if (event.getLevel().isClientSide()) return;
-        TimedStructureManager manager = MANAGERS.get(event.getLevel());
+        StructureConceptManager manager = MANAGERS.get(event.getLevel());
         if (manager != null) {
             manager.onChunkUnload(event.getChunk());
         }
     }
 
     private static void onDailyTickEvent(ServerTickEvent event) {
-        for (TimedStructureManager manager : MANAGERS.values()) {
+        for (StructureConceptManager manager : MANAGERS.values()) {
             manager.onDailyTick();
         }
     }
 
     private static void onDataSave(DatastoreSaveEvent event) {
-        for (TimedStructureManager manager : MANAGERS.values()) {
+        for (StructureConceptManager manager : MANAGERS.values()) {
             manager.save(event.getDataStore());
         }
     }
