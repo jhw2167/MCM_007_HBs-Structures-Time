@@ -107,7 +107,7 @@ public class StructureConceptManager {
     // -------------------------------------------------------------------------
 
     /**
-     * Called from MixinChunkGenerator. Finds the correct StructureConceptManager
+     * Test the spawning structure to determine if we need to track it
      * by matching the context's registryAccess to each managed ServerLevel's
      * registryAccess, then delegates to the instance handler.
      */
@@ -122,10 +122,6 @@ public class StructureConceptManager {
             }
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Instance handler
-    // -------------------------------------------------------------------------
 
     /**
      * Handles the tryGenerateStructure event for this manager's level.
