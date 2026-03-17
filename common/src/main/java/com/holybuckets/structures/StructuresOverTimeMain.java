@@ -3,6 +3,7 @@ package com.holybuckets.structures;
 
 import com.holybuckets.foundation.event.EventRegistrar;
 import com.holybuckets.structures.config.TemplateConfig;
+import com.holybuckets.structures.core.TimedStructureManager;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
@@ -39,6 +40,8 @@ public class StructuresOverTimeMain {
         EventRegistrar registrar = EventRegistrar.getInstance();
         //ChallengeBlockBehavior.init(registrar);
 
+        //Managers
+        TimedStructureManager.init(registrar);
 
         //register local events
         registrar.registerOnBeforeServerStarted(this::onServerStarting);

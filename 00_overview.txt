@@ -1,86 +1,35 @@
 Overview
 ---
 
-Technologies:
-Jetbrains Intelij 
-Forge 1.20.1 Mod Development Kit
-
-Mod Naming Convention:
-MCM_00#_HBs-Ore-Clusters-and-Regen
-
-Setup
+Keep Notes:
 ---
 
-1. Create a repo on github according to the mod naming convention above
+Structures over Time
 
-2. Clone repo into local repository
+- make a copy of the over world "canvas"
+- track each structure that spawns in the over world, ad them to manager ::managed chunk extension
+- save start and end server tick
 
-3. Copy all files in the 00_Forge-1.20.1_TEMPLATE directory into your cloned empty directory
-	- Dont copy .git and .idea directories
+- hack structure creation method - no structures will spawn in canvas, but we need same biome distribution
+- must be a dynamic copy of the over world, so all modded configurations are transfered
+- structureManager.isApproved()
+- load json config 
+- try to upgrade villages to integrated villages
+- remove all integrated villages
+- spawn normal villages
+- spawn integrated ones on command
+- 
 
-4. Bash into the directory, use ./gradlew to init the directory
-	- run ./gradlew tasks to view list of all gradle tasks you can run
-	- Call gradle on a particular subproject gradlew e.g. fabric:clean
-	- Call a specific group task e.g. forge:build
+I want to make an exact copy of the Minecraft Overworld, it's structures, terrain patterns and layout. The vanilla_dimension for a given Minecraft seed will have each chunk identical to the corresponding chunk in the over world. For a given chunk, it will be the same biome as the Overworld, make use of the same carvers, and structure setters. It will have the same ore clumps at the save position, the same trees and geodes. This must be copied at runtime, not data gen'd, so all modded additions to the Overworld are considered. Where can I hook into dynamically to get a link to the Overworlds source generators.
 
-5. To start Minecraft (by running a client or a Server) your options are:
-	- fabric:runClient
-	- forge:Client
- 	- fabric:runServer
-
-6. Fill out your mod's basic information in gradle.properties
-	- Mod Name
-	- Mod ID
-	- Mod Version
-	- Mod 
-
-7. Clean directory and setup mixin files
-	- ./gradlew cleanIdea
-	- src/main/resources has two mixin files you must rename after your modId
-
-8. Setup your java code
-	- Determine you package names
-	- Assign the correct mod_id to your ForgeMain method
-	- mods.toml will throw error
-
-9. Add dependencies to your gradle
-	- some fundamental dependencies are included within the build.gradle
+- Overworld copy has all structures removed
+- use "do place" structure to place in established location, trigger jigsaws
+- 
 
 
 
-
-Appendix
----
-
-
-#7 Dependency help
----
-- compileOnly "dependency"
-	Purpose: The dependency is needed during compilation, but it is not included in 
-			the runtime environment because it is provided, like by Minecraft or forge
-
-- compileOnly fg.deobf("dependency")
-	fg.deobf is a Forge specific plugin that deobfuscates a jar according to minecraft mappings
-
-- runtimeOnly "dependency"
-	- Your mod may have "soft dependencies" on another mod, using reflection for example
-	- Good to clarify, not essential
-
-- runtimeOnly fg.deobf("dependency")
-
-
-Java 21
----
-- Set your JDK to Java 21
-- set your Gradle compat to Java 21
-- Set your toolchain in gradle file to java 21
-- set mixin compat to java 21
-
-A number of errors occur
-
-	- error with the mixin compata of JAVA_21 not being supported
-
-	- [[Unsupported JNI version detected in LWJGL]] - crashes if attempting to debug
-
-	- mods.toml missing metadata for modid
-
+- if player spends significant time in a chunk, the structure is not upgraded - we'll see here, makes sense for a surprise structure to spawn or villagers to build
+- 
+Track Players Near Structures - need to know if player has actually discovered structures, more than structures that were just chunk loaded at some point. For when we start random chunk loading to find structures.
+- need to start saving client data on client side, we can do json in client folder
+- 
