@@ -1,6 +1,5 @@
 package com.holybuckets.structures.mixin;
 
-import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.core.StructureConceptManager;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
@@ -14,10 +13,10 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ChunkGenerator.class)
-public abstract class MixinChunkGenerator {
+public abstract class ChunkGeneratorMixin {
 
     private static final String CLASS_ID = "020";
 
@@ -36,7 +35,7 @@ public abstract class MixinChunkGenerator {
         ChunkAccess chunk,
         ChunkPos chunkPos,
         SectionPos sectionPos,
-        CallbackInfo ci
+        CallbackInfoReturnable<Boolean> ci
     ) {
         StructureConceptManager.StructureGenerateContext ctx =
             new StructureConceptManager.StructureGenerateContext(
@@ -45,11 +44,7 @@ public abstract class MixinChunkGenerator {
                 registryAccess,
                 randomState,
                 structureTemplateManager,
-                seed,
-                chunk,
-                chunkPos,
-                sectionPos,
-                ci
+                seed, chunk, chunkPos, sectionPos
             );
 
         StructureConceptManager.onTryGenerateStructure(ctx);

@@ -5,13 +5,13 @@
     "refmap": "${mod_id}.refmap.json",
     "compatibilityLevel": "JAVA_17",
     "mixins": [
+        "StructureCheckMixin",
+        "StructureManagerMixin"
     ],
     "client": [
     ],
     "server": [
-        "MixinChunkGenerator",
-        "MixinStructureCheck",
-        "MixinStructureManager"
+
     ],
     "injectors": {
         "defaultRequire": 1

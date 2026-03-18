@@ -2,7 +2,6 @@ package com.holybuckets.structures.mixin;
 
 import com.holybuckets.structures.core.StructureConceptManager;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureCheck;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
@@ -14,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Map;
 
 @Mixin(StructureCheck.class)
-public abstract class MixinStructureCheck {
+public abstract class StructureCheckMixin {
 
     private static final String CLASS_ID = "021";
 
@@ -29,8 +28,8 @@ public abstract class MixinStructureCheck {
         CallbackInfo ci
     ) {
         StructureCheck that = (StructureCheck)(Object) this;
-        Level level = that.serverLevel;
-        StructureConceptManager.onStructureLoad(chunkPos, structureStarts, level  );
+        //Level level = that.serverLevel;
+        StructureConceptManager.onStructureLoad(chunkPos, structureStarts);
     }
 
 }
