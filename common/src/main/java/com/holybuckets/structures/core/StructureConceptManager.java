@@ -1,7 +1,6 @@
 package com.holybuckets.structures.core;
 
 import com.holybuckets.foundation.GeneralConfig;
-import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.foundation.datastore.DataStore;
 import com.holybuckets.foundation.event.EventRegistrar;
@@ -10,7 +9,6 @@ import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.event.custom.TickType;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
-import com.holybuckets.structures.core.model.ManagedStructureConceptChunk;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.LevelLoadingEvent;
@@ -18,7 +16,6 @@ import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -29,14 +26,11 @@ import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraft.world.level.levelgen.structure.StructureCheck;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.minecraft.world.level.chunk.StructureAccess;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import static com.holybuckets.foundation.HBUtil.LevelUtil;
 
 import java.util.*;
 
@@ -60,6 +54,8 @@ public class StructureConceptManager {
 
     //** STATICS
     private static Map<LevelAccessor, StructureConceptManager> MANAGERS = new HashMap<>();
+    private static ModConfig MOD_CONFIG;
+    private static GeneralConfig GENERAL_CONFIG;
 
 
     //** CONSTRUCTORS
@@ -88,6 +84,11 @@ public class StructureConceptManager {
     private void handleSetStartForStructure(StructureSetStartContext ctx) {
         String id = getStructureId(ctx.structure).toString();
         logStructurePlacement("setStartForStructure", id);
+
+        if( MOD_CONFIG.isActiveStructure(getStructureId(ctx.structure)) ) {
+            registerManagedChunk(ctx);
+            ctx.ci.cancel();
+        }
     }
 
     private void handleTryGenerateStructure(StructureGenerateContext ctx) {
@@ -148,14 +149,18 @@ public class StructureConceptManager {
      *
      * @return the existing or newly registered ManagedStructureConceptChunk
      */
-    public ManagedStructureConceptChunk registerManagedChunk(ManagedStructureConceptChunk managed) {
-        String chunkId = managed.getId();
+    public ManagedStructureConceptChunk registerManagedChunk(StructureSetStartContext ctx)
+    {
+        String chunkId = ChunkUtil.getId(ctx.sectionPos.chunk());
         if (managedChunks.containsKey(chunkId)) {
             return managedChunks.get(chunkId);
         }
+        ManagedStructureConceptChunk managed = ManagedStructureConceptChunk.getInstance(level, chunkId);
+        managed.setStructureStartContext(ctx, getStructureId(ctx.structure));
+        managed.setStage();
+
         managedChunks.put(chunkId, managed);
-        LoggerProject.logDebug(CLASS_ID + "020",
-            "Registered timed structure chunk: " + chunkId);
+        LoggerProject.logDebug(CLASS_ID + "020", "Registered timed structure chunk: " + chunkId);
         return managed;
     }
 
@@ -191,6 +196,8 @@ public class StructureConceptManager {
 
     private static void onServerStart(ServerStartingEvent event) {
         MANAGERS.clear();
+        GENERAL_CONFIG = GeneralConfig.getInstance();
+        MOD_CONFIG = ModConfig.getInstance();
         ManagedStructureConceptChunk.GENERAL_CONFIG = GeneralConfig.getInstance();
         ManagedStructureConceptChunk.MOD_CONFIG = ModConfig.getInstance();
     }
@@ -286,3 +293,49 @@ public class StructureConceptManager {
             RegistryAccess registryAccess,
             RandomState randomState,
             StructureTemplateManager structureTemplateManager,
+            long seed,
+            ChunkAccess chunk,
+            ChunkPos chunkPos,
+            SectionPos sectionPos
+        ) {
+            this.structureEntry = structureEntry;
+            this.structureManager = structureManager;
+            this.registryAccess = registryAccess;
+            this.randomState = randomState;
+            this.structureTemplateManager = structureTemplateManager;
+            this.seed = seed;
+            this.chunk = chunk;
+            this.chunkPos = chunkPos;
+            this.sectionPos = sectionPos;
+        }
+    }
+
+    /**
+     * Holds all parameters passed from the MixinStructureManager injection,
+     * providing easy public access to each value.
+     */
+    public static class StructureSetStartContext {
+        public final SectionPos sectionPos;
+        public final Structure structure;
+        public final StructureStart structureStart;
+        public final StructureAccess structureAccess;
+        public ServerLevel serverLevel;
+        public CallbackInfo ci;
+
+        public StructureSetStartContext(
+            SectionPos sectionPos,
+            Structure structure,
+            StructureStart structureStart,
+            StructureAccess structureAccess,
+            ServerLevel serverLevel,
+            CallbackInfo ci
+        ) {
+            this.sectionPos = sectionPos;
+            this.structure = structure;
+            this.structureStart = structureStart;
+            this.structureAccess = structureAccess;
+            this.serverLevel = serverLevel;
+            this.ci = ci;
+        }
+    }
+}

@@ -40,7 +40,8 @@ public abstract class StructureManagerMixin {
                 structure,
                 structureStart,
                 structureAccess,
-                serverLevel
+                serverLevel,
+                ci
             );
 
         StructureConceptManager.onSetStartForStructure(ctx);

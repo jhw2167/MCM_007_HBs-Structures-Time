@@ -10,10 +10,8 @@ import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
 import net.blay09.mods.balm.api.event.server.ServerStoppedEvent;
-import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.levelgen.structure.Structure;
@@ -67,8 +65,13 @@ public class ModConfig {
     }
 
     @Nullable
-    public StructureConcept getConcept(String conceptId) {
+    public StructureConcept getStructureConcept(String conceptId) {
         return structureConceptConfig.getConcept(conceptId);
+    }
+
+    @Nullable
+    public StructureConcept getStructureConcept(ResourceLocation loc) {
+        return activeStructureConcepts.get(loc);
     }
 
     private void initStructures(MinecraftServer server)
@@ -183,5 +186,9 @@ public class ModConfig {
 
     private static void onServerStopped(ServerStoppedEvent event) {
         getInstance().onServerStopped();
+    }
+
+    public boolean isActiveStructure(ResourceLocation structureLoc) {
+        return activeStructureConcepts.containsKey(structureLoc);
     }
 }

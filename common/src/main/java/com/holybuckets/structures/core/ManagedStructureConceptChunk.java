@@ -1,18 +1,20 @@
-package com.holybuckets.structures.core.model;
+package com.holybuckets.structures.core;
 
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.foundation.modelInterface.IMangedChunkData;
-import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelAccessor;
+
+import static com.holybuckets.structures.core.StructureConceptManager.StructureSetStartContext;
 
 /**
  * Class: ManagedTimedStructureChunk
@@ -33,16 +35,17 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     }
 
     /** Variables **/
-    private LevelAccessor level;
+    private ServerLevel level;
     private String id;
     private ChunkPos pos;
     private int stage;
     private StructureConcept structure;
+    private StructureSetStartContext structureStartContext;
 
     /** Constructors **/
 
     /** Default constructor - creates dummy node for deserialization */
-    private ManagedStructureConceptChunk(LevelAccessor level) {
+    private ManagedStructureConceptChunk(ServerLevel level) {
         super();
         this.level = level;
         this.id = null;
@@ -52,14 +55,14 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     }
 
     /** Constructor with id for a chunk that may not be loaded yet */
-    private ManagedStructureConceptChunk(LevelAccessor level, String id) {
+    private ManagedStructureConceptChunk(ServerLevel level, String id) {
         this(level);
         this.setId(id);
         this.pos = ChunkUtil.getChunkPos(id);
     }
 
     /** Full constructor with structure reference */
-    public ManagedStructureConceptChunk(LevelAccessor level, String id, StructureConcept concept) {
+    public ManagedStructureConceptChunk(ServerLevel level, String id, StructureConcept concept) {
         this(level, id);
         this.structure = concept;
     }
@@ -96,11 +99,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     }
 
     @Override
-    public void setLevel(LevelAccessor level) {
-        this.level = level;
+    public void setLevel(LevelAccessor levelAccessor) {
+        if (levelAccessor == null || levelAccessor.isClientSide()) return;
+        this.level = (ServerLevel) levelAccessor;
     }
 
-    public void setstage(int stage) {
+    public void setStage(int stage) {
         this.stage = stage;
     }
 
@@ -120,8 +124,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     @Override
     public void handleChunkLoaded(ChunkLoadingEvent.Load event) {
-        this.level = event.getLevel();
-        this.pos = event.getChunkPos();
+
     }
 
     @Override
@@ -154,13 +157,16 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         String conceptId = tag.getString("structure");
         if (conceptId != null && !conceptId.isEmpty()) {
-            this.structure = MOD_CONFIG.getConcept(conceptId);
+            this.structure = MOD_CONFIG.getStructureConcept(conceptId);
         }
     }
 
     /** Static Methods **/
 
-    public static ManagedStructureConceptChunk getInstance(LevelAccessor level, String id) {
+    public static ManagedStructureConceptChunk getInstance(LevelAccessor levelAcc, String id)
+    {
+        if(levelAcc.isClientSide()) return null;
+        ServerLevel level = (ServerLevel) levelAcc;
         ManagedChunk parent = getParent(level, id);
         if (parent == null)
             return new ManagedStructureConceptChunk(level, id);
@@ -175,5 +181,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public static ManagedChunk getParent(LevelAccessor level, String id) {
         ManagedChunkUtility instance = ManagedChunkUtility.getInstance(level);
         return instance.getManagedChunk(id);
+    }
+
+    public void setStructureStartContext(StructureSetStartContext ctx, ResourceLocation sourceStructure) {
+        this.structureStartContext = ctx;
+        this.structure = MOD_CONFIG.getStructureConcept(sourceStructure);
     }
 }
