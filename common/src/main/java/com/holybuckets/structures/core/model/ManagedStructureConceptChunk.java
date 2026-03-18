@@ -141,7 +141,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             tag.putString("structure", structure.getStructureConceptId());
         }
 
-        LoggerProject.logDebug(CLASS_ID + "001", "Serializing ManagedTimedStructureChunk: " + tag);
+        //LoggerProject.logDebug(CLASS_ID + "001", "Serializing ManagedTimedStructureChunk: " + tag);
         return tag;
     }
 
