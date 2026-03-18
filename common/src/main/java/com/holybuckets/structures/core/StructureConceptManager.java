@@ -251,16 +251,12 @@ public class StructureConceptManager {
     }
 
     public static void onSetStartForStructure(StructureSetStartContext ctx) {
-        for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
-            LevelAccessor levelAccessor = entry.getKey();
-            if (levelAccessor instanceof ServerLevel) {
-                entry.getValue().handleSetStartForStructure(ctx);
-                return;
-            }
+        StructureConceptManager manager = MANAGERS.get(ctx.serverLevel);
+        if (manager != null) {
+            manager.handleSetStartForStructure(ctx);
         }
     }
 
-//chunkPos, structureStarts, (StructureCheck)(Object)this, ci);
     public static void onStructureLoad(ChunkPos chunkPos, Map<Structure, StructureStart> structureStarts) {
         for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
                 entry.getValue().handleStructureLoad(chunkPos, structureStarts);
@@ -290,43 +286,3 @@ public class StructureConceptManager {
             RegistryAccess registryAccess,
             RandomState randomState,
             StructureTemplateManager structureTemplateManager,
-            long seed,
-            ChunkAccess chunk,
-            ChunkPos chunkPos,
-            SectionPos sectionPos
-        ) {
-            this.structureEntry = structureEntry;
-            this.structureManager = structureManager;
-            this.registryAccess = registryAccess;
-            this.randomState = randomState;
-            this.structureTemplateManager = structureTemplateManager;
-            this.seed = seed;
-            this.chunk = chunk;
-            this.chunkPos = chunkPos;
-            this.sectionPos = sectionPos;
-        }
-    }
-
-    /**
-     * Holds all parameters passed from the MixinStructureManager injection,
-     * providing easy public access to each value.
-     */
-    public static class StructureSetStartContext {
-        public final SectionPos sectionPos;
-        public final Structure structure;
-        public final StructureStart structureStart;
-        public final StructureAccess structureAccess;
-
-        public StructureSetStartContext(
-            SectionPos sectionPos,
-            Structure structure,
-            StructureStart structureStart,
-            StructureAccess structureAccess
-        ) {
-            this.sectionPos = sectionPos;
-            this.structure = structure;
-            this.structureStart = structureStart;
-            this.structureAccess = structureAccess;
-        }
-    }
-}
