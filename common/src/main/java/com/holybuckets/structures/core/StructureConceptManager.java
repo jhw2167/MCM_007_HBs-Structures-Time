@@ -1,6 +1,7 @@
 package com.holybuckets.structures.core;
 
 import com.holybuckets.foundation.GeneralConfig;
+import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.foundation.datastore.DataStore;
 import com.holybuckets.foundation.event.EventRegistrar;
@@ -14,8 +15,12 @@ import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.LevelLoadingEvent;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
+import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -48,67 +53,55 @@ public class StructureConceptManager {
 
     public static final String CLASS_ID = "011";
 
-    /**
-     * Static manager map and state
-     **/
-    private static Map<LevelAccessor, StructureConceptManager> MANAGERS = new HashMap<>();
-
-    /**
-     * Instance fields
-     **/
     private final ServerLevel level;
+    private final Registry<Structure> registry;
     private final Map<String, ManagedStructureConceptChunk> managedChunks;
 
-    /**
-     * Constructor
-     **/
+
+    //** STATICS
+    private static Map<LevelAccessor, StructureConceptManager> MANAGERS = new HashMap<>();
+
+
+    //** CONSTRUCTORS
     private StructureConceptManager(ServerLevel level) {
         this.level = level;
+        this.registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         this.managedChunks = new HashMap<>();
         MANAGERS.put(level, this);
         LoggerProject.logInit(CLASS_ID + "000", StructureConceptManager.class.getName());
     }
 
-    public static StructureSetStartContext createStructureSetStartContext(
-        SectionPos sectionPos,
-        Structure structure,
-        StructureStart structureStart,
-        StructureAccess structureAccess,
-        CallbackInfo ci
-    ) {
-        return new StructureSetStartContext(
-            sectionPos,
-            structure,
-            structureStart,
-            structureAccess,
-            ci
-        );
+    private ResourceLocation getStructureId(Structure s) {
+        return registry.getKey(s);
     }
 
 
-
-    /**
-     * Handles the tryGenerateStructure event for this manager's level.
-     */
-    private void handleTryGenerateStructure(StructureGenerateContext ctx) {
-        logStructurePlacement(ctx);
-        // TODO: Add further structure concept logic here
-    }
 
     /**
      * Logs the structure that is attempting to be placed.
      */
     private void logStructurePlacement(String type, String structureName) {
         LoggerProject.logDebug(CLASS_ID + "030",
-            "tryGenerateStructure called for structure: " + structureName);
+            type + " called for structure: " + structureName);
     }
 
-    /**
-     * Handles the setStartForStructure event for this manager's level.
-     */
     private void handleSetStartForStructure(StructureSetStartContext ctx) {
-        logStructurePlacement("setStartForStructure", ctx.);
-        // TODO: Add further structure concept logic here
+        String id = getStructureId(ctx.structure).toString();
+        logStructurePlacement("setStartForStructure", id);
+    }
+
+    private void handleTryGenerateStructure(StructureGenerateContext ctx) {
+        String id = getStructureId(ctx.structureEntry.structure().value()).toString();
+        logStructurePlacement("tryGenerateStructure", id);
+    }
+
+    private void handleStructureLoad(ChunkPos chunkPos, Map<Structure, StructureStart> structureStarts) {
+       String chunkId = ChunkUtil.getId(chunkPos);
+       for(Structure s : structureStarts.keySet()) {
+           String structureId = getStructureId(s).toString();
+           LoggerProject.logDebug(CLASS_ID + "031",
+               "Structure loaded: " + structureId + " in chunk: " + chunkId);
+       }
     }
 
 
@@ -268,12 +261,9 @@ public class StructureConceptManager {
     }
 
 //chunkPos, structureStarts, (StructureCheck)(Object)this, ci);
-    public static void onStructureLoad(ChunkPos chunkPos, Map<Structure, StructureStart> structureStarts, StructureCheck structureCheck) {
+    public static void onStructureLoad(ChunkPos chunkPos, Map<Structure, StructureStart> structureStarts) {
         for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
-            LevelAccessor levelAccessor = entry.getKey();
-            if (levelAccessor instanceof ServerLevel) {
-                entry.getValue().handleStructureLoad(chunkPos, structureStarts, structureCheck);
-            }
+                entry.getValue().handleStructureLoad(chunkPos, structureStarts);
         }
     }
 
@@ -293,7 +283,6 @@ public class StructureConceptManager {
         public final ChunkAccess chunk;
         public final ChunkPos chunkPos;
         public final SectionPos sectionPos;
-        public final CallbackInfo ci;
 
         public StructureGenerateContext(
             StructureSet.StructureSelectionEntry structureEntry,
@@ -304,8 +293,7 @@ public class StructureConceptManager {
             long seed,
             ChunkAccess chunk,
             ChunkPos chunkPos,
-            SectionPos sectionPos,
-            CallbackInfo ci
+            SectionPos sectionPos
         ) {
             this.structureEntry = structureEntry;
             this.structureManager = structureManager;
@@ -316,13 +304,8 @@ public class StructureConceptManager {
             this.chunk = chunk;
             this.chunkPos = chunkPos;
             this.sectionPos = sectionPos;
-            this.ci = ci;
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Public static inner class: StructureSetStartContext
-    // -------------------------------------------------------------------------
 
     /**
      * Holds all parameters passed from the MixinStructureManager injection,
@@ -333,20 +316,17 @@ public class StructureConceptManager {
         public final Structure structure;
         public final StructureStart structureStart;
         public final StructureAccess structureAccess;
-        public final CallbackInfo ci;
 
         public StructureSetStartContext(
             SectionPos sectionPos,
             Structure structure,
             StructureStart structureStart,
-            StructureAccess structureAccess,
-            CallbackInfo ci
+            StructureAccess structureAccess
         ) {
             this.sectionPos = sectionPos;
             this.structure = structure;
             this.structureStart = structureStart;
             this.structureAccess = structureAccess;
-            this.ci = ci;
         }
     }
 }
