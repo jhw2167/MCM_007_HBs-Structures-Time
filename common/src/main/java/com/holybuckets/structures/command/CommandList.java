@@ -5,6 +5,7 @@ package com.holybuckets.structures.command;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.CommandRegistry;
 import com.holybuckets.structures.LoggerProject;
+import com.holybuckets.structures.core.StructureConceptManager;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -29,6 +30,7 @@ public class CommandList {
         CommandRegistry.register(LocateClusters::noArgs);
         CommandRegistry.register(LocateClusters::limitCount);
         CommandRegistry.register(LocateClusters::limitCountSpecifyBlockType);
+        CommandRegistry.register(SetGlobalStage::withStageArg);
     }
 
     //1. Locate Clusters
@@ -81,11 +83,49 @@ public class CommandList {
 
         private static int execute(CommandSourceStack source, int count, String blockType)
         {
-
             LoggerProject.logDebug("010001", "Locate Clusters Command");
             return 0;
         }
 
+
+    }
+    //END COMMAND
+
+
+    //2. Set Global Stage
+    private static class SetGlobalStage
+    {
+        private static final int MIN_STAGE = 1;
+        private static final int MAX_STAGE = 4;
+
+        // Register command with stage argument
+        private static LiteralArgumentBuilder<CommandSourceStack> withStageArg() {
+            return Commands.literal(PREFIX)
+                .then(Commands.literal("setGlobalStage")
+                    .then(Commands.argument("stage", IntegerArgumentType.integer())
+                        .executes(context -> {
+                            int stage = IntegerArgumentType.getInteger(context, "stage");
+                            return execute(context.getSource(), stage);
+                        })
+                    )
+                );
+        }
+
+        private static int execute(CommandSourceStack source, int stage)
+        {
+            LoggerProject.logDebug("010002", "Set Global Stage Command");
+
+            if (stage < MIN_STAGE || stage > MAX_STAGE) {
+                source.sendFailure(Component.literal(
+                    "Invalid stage: " + stage + ". Stage must be between " + MIN_STAGE + " and " + MAX_STAGE + " (inclusive)."
+                ));
+                return 0;
+            }
+
+            StructureConceptManager.setGlobalStage(stage);
+            source.sendSuccess(() -> Component.literal("Global stage set to " + stage + "."), true);
+            return 1;
+        }
 
     }
     //END COMMAND
