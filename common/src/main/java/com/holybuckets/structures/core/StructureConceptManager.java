@@ -86,13 +86,13 @@ public class StructureConceptManager {
      * Logs the structure that is attempting to be placed.
      */
     private void logStructurePlacement(String type, String structureName) {
-        LoggerProject.logDebug(CLASS_ID + "030",
+        LoggerProject.logDebug("011030",
             type + " called for structure: " + structureName);
     }
 
     private void handleSetStartForStructure(StructureSetStartContext ctx) {
         String id = getStructureId(ctx.structure).toString();
-        logStructurePlacement("setStartForStructure", id);
+        //logStructurePlacement("setStartForStructure", id);
 
         if( MOD_CONFIG.isActiveStructure(getStructureId(ctx.structure)) ) {
             registerManagedChunk(ctx);
@@ -101,7 +101,7 @@ public class StructureConceptManager {
 
     private void handleTryGenerateStructure(StructureGenerateContext ctx) {
         String id = getStructureId(ctx.structureEntry.structure().value()).toString();
-        logStructurePlacement("tryGenerateStructure", id);
+        //logStructurePlacement("tryGenerateStructure", id);
     }
 
     private void handleStructureLoad(ChunkPos chunkPos, Map<Structure, StructureStart> structureStarts) {
@@ -111,6 +111,20 @@ public class StructureConceptManager {
            LoggerProject.logDebug(CLASS_ID + "031",
                "Structure loaded: " + structureId + " in chunk: " + chunkId);
        }
+    }
+
+    private void handleChunkLoad(ChunkLoadingEvent.Load event) {
+        ChunkPos chunkPos = event.getChunkPos();
+        String chunkId = ChunkUtil.getId(chunkPos);
+
+        // If this is a managed chunk, place the appropriate stage of the structure.
+        ManagedStructureConceptChunk managedChunk = managedChunks.get(chunkPos);
+        if (managedChunk != null) {
+            ManagedStructureConceptChunk.setInstance(event.getLevel(), chunkId, managedChunk);
+            managedChunk.handleChunkLoaded(event);
+            String structId = managedChunk.getStructureConcept().getStructureConceptId();
+            LoggerProject.logDebug(CLASS_ID + "032", "Chunk loaded: " + chunkId + " " + structId );
+        }
     }
 
 
@@ -181,10 +195,11 @@ public class StructureConceptManager {
         if (managedChunks.containsKey(cp)) {
              return managedChunks.get(cp);
         }
-        ManagedStructureConceptChunk managed = ManagedStructureConceptChunk.getInstance(level, id);
-        managed.setStructureStartContext(ctx, getStructureId(ctx.structure), globalStage);
-
+        ManagedStructureConceptChunk managed = new ManagedStructureConceptChunk(
+        level, cp, ctx, globalStage);
         managedChunks.put(cp, managed);
+
+
         LoggerProject.logDebug(CLASS_ID + "020", "Registered timed structure chunk: " + cp);
         return managed;
     }
@@ -229,13 +244,25 @@ public class StructureConceptManager {
     public static void init(EventRegistrar reg) {
         reg.registerOnBeforeServerStarted(StructureConceptManager::onServerStart);
         reg.registerOnLevelLoad(StructureConceptManager::onLevelLoad, EventPriority.High);
-        //reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
+        reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
         //reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
         //reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::onDailyTickEvent);
         reg.registerOnServerTick(TickType.ON_20_TICKS, StructureConceptManager::onDailyTickEvent);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
 
         ManagedStructureConceptChunk.registerManagedChunkData();
+    }
+
+    private static void onChunkLoadEvent(ChunkLoadingEvent.Load event) {
+        if (event.getLevel().isClientSide()) return;
+
+        ServerLevel serverLevel = (ServerLevel) event.getLevel();
+        if (!serverLevel.dimension().equals(Level.OVERWORLD)) return;
+
+        StructureConceptManager manager = MANAGERS.get(serverLevel);
+        if (manager != null && manager.isManagedChunk(event.getChunkPos())) {
+            manager.handleChunkLoad(event);
+        }
     }
 
     private static void onServerStart(ServerStartingEvent event) {

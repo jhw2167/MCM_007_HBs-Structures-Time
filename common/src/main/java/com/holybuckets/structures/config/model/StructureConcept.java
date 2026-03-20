@@ -163,10 +163,11 @@ public class StructureConcept {
      */
     @Nullable
     public StructureConceptStage getStage(int stageNumber) {
+        StructureConceptStage result = stages.get(0);
         for (StructureConceptStage s : stages) {
-            if (s.getStage() == stageNumber) return s;
+            if (s.getStage() == stageNumber) result = s;
         }
-        return null;
+        return result;
     }
 
     /**

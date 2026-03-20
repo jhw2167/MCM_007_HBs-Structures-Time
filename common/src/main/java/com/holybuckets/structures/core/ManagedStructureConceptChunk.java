@@ -6,7 +6,6 @@ import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.foundation.modelInterface.IMangedChunkData;
-import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
@@ -32,9 +31,7 @@ import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
 import net.minecraft.world.level.levelgen.structure.pieces.StructurePiecesBuilder;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 import static com.holybuckets.structures.core.StructureConceptManager.StructureSetStartContext;
 
@@ -51,9 +48,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public static GeneralConfig GENERAL_CONFIG;
 
 
+    private static final ManagedStructureConceptChunk DEFAULT = new ManagedStructureConceptChunk();
     public static void registerManagedChunkData() {
         ManagedChunk.registerManagedChunkData(ManagedStructureConceptChunk.class,
-            () -> new ManagedStructureConceptChunk(null));
+            () -> DEFAULT);
     }
 
     /** Variables **/
@@ -61,33 +59,30 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private String id;
     private ChunkPos pos;
     private int stage;
-    private StructureConcept structure;
+    private StructureConcept structureConcept;
     private StructureSetStartContext structureStartContext;
     private LevelChunk chunk;
+    private Map<Structure, StructureStart> structureStarts;
 
     /** Constructors **/
 
     /** Default constructor - creates dummy node for deserialization */
-    private ManagedStructureConceptChunk(ServerLevel level) {
+    private ManagedStructureConceptChunk() {
         super();
+
+    }
+
+    public ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp, StructureSetStartContext ctx, int stage) {
+        this();
         this.level = level;
-        this.id = null;
-        this.pos = null;
-        this.stage = 0;
-        this.structure = null;
-    }
-
-    /** Constructor with id for a chunk that may not be loaded yet */
-    private ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp) {
-        this(level);
-        this.id = HBUtil.ChunkUtil.getId(cp);
         this.pos = cp;
-    }
-
-    /** Full constructor with structure reference */
-    public ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp, StructureConcept concept) {
-        this(level, cp);
-        this.structure = concept;
+        this.id = ChunkUtil.getId(cp);
+        this.structureStartContext = ctx;
+        ResourceLocation sourceStruct = MOD_CONFIG.loc(ctx.structure);
+        this.structureConcept = MOD_CONFIG.getStructureConcept(sourceStruct);
+        this.stage = stage;
+        this.structureStarts = new HashMap<>();
+        generateAllStructureStarts();
     }
 
     /** Getters **/
@@ -143,57 +138,51 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     @Override
     public void handleChunkLoaded(ChunkLoadingEvent.Load event) {
+        if(this==DEFAULT) return;
         chunk = (LevelChunk) event.getChunk();
         level = (ServerLevel) event.getLevel();
-        generateAllStructureStarts();
+
+        //Add all structureStarts to chunk if it doesnt have them
+        for(Structure s : structureStarts.keySet()) {
+            if(chunk.getStartForStructure(s) == null) {
+                chunk.setStartForStructure(s, structureStarts.get(s));
+            }
+        }
     }
 
     @Override
     public void handleChunkUnloaded(ChunkLoadingEvent.Unload event) {
-        // No-op for now
+        if(this==DEFAULT) return;
     }
 
     //** CORE
     public boolean hasStructureInConcept(Structure s) {
-        if(structure == null) return false;
-        return structure.hasStructure(MOD_CONFIG.loc(s));
+        if(structureConcept == null) return false;
+        return structureConcept.hasStructure(MOD_CONFIG.loc(s));
     }
 
     public boolean isStructureValidForStage(Structure s) {
-    if(structure == null) return false;
-        return structure.getStage(stage).is(MOD_CONFIG.loc(s));
+    if(structureConcept == null) return false;
+        return structureConcept.getStage(stage).is(MOD_CONFIG.loc(s));
     }
 
 
     /** Static Methods **/
+    public static ManagedStructureConceptChunk getInstance(LevelAccessor levelAcc, String id) {
+        ChunkPos cp = ChunkUtil.getChunkPos(id);
+        return StructureConceptManager.get(levelAcc).getManagedChunks().getOrDefault(cp, DEFAULT);
+    }
 
-    private static final ManagedStructureConceptChunk
-    public static ManagedStructureConceptChunk getInstance(LevelAccessor levelAcc, String id)
-    {
-        if(levelAcc.isClientSide()) return null;
-        ServerLevel level = (ServerLevel) levelAcc;
-        ChunkPos pos = ChunkUtil.getChunkPos(id);
-        ManagedStructureConceptChunk c = StructureConceptManager.getManagedChunk(level, pos);
-        if(c != null) return c;
+    public static void setInstance(LevelAccessor levelAcc, String id, ManagedStructureConceptChunk c) {
+        ManagedChunk parent = ManagedChunkUtility.getManagedChunk(levelAcc, id);
+        if (parent == null) return;
+        parent.setSubclass(ManagedStructureConceptChunk.class, c);
 
-        ManagedChunk parent = getParent(level, id);
-        if (parent == null) return new ManagedStructureConceptChunk(level, pos);
-
-        c = (ManagedStructureConceptChunk) parent.getSubclass(ManagedStructureConceptChunk.class);
-        if (c == null) return new ManagedStructureConceptChunk(level, pos);
-
-        return c;
     }
 
     public static ManagedChunk getParent(LevelAccessor level, String id) {
         ManagedChunkUtility instance = ManagedChunkUtility.getInstance(level);
         return instance.getManagedChunk(id);
-    }
-
-    public void setStructureStartContext(StructureSetStartContext ctx, ResourceLocation sourceStructure, int stage) {
-        this.structureStartContext = ctx;
-        this.structure = MOD_CONFIG.getStructureConcept(sourceStructure);
-        this.stage = stage;
     }
 
     //** CORE
@@ -205,7 +194,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      */
     public void generateAllStructureStarts()
     {
-        if (level == null || structureStartContext == null || structure == null) return;
+        if (level == null || structureStartContext == null || structureConcept == null) return;
 
         ChunkGenerator generator = level.getChunkSource().getGenerator();
         RandomState randomState = level.getChunkSource().randomState();
@@ -213,19 +202,19 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         RegistryAccess registryAccess = level.registryAccess();
         long seed = level.getSeed();
 
-        for (int s = 1; s <= structure.getStages().size(); s++)
+        for (int s = 1; s <= structureConcept.getStages().size(); s++)
         {
-            StructureConcept.StructureConceptStage conceptStage = structure.getStage(s);
+            StructureConcept.StructureConceptStage conceptStage = structureConcept.getStage(s);
             if (conceptStage == null || conceptStage.isEmpty()) continue;
 
             Structure mcStructure = MOD_CONFIG.structure(conceptStage.getStructureLoc());
             if (mcStructure == null) continue;
 
             if(mcStructure == ModConfig.EMPTY_STRUCT) {
-                chunk.setStartForStructure(mcStructure, structureStartContext.structureStart);
+                structureStarts.put(mcStructure, structureStartContext.structureStart);
                 continue;
             }
-            if(chunk.getStartForStructure(mcStructure) != null) {
+            if(structureStarts.get(mcStructure) != null) {
                 continue;
             }
 
@@ -242,7 +231,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             PiecesContainer pieces = piecesBuilder.build();
             StructureStart start = new StructureStart(mcStructure, pos, 0, pieces);
 
-            chunk.setStartForStructure(mcStructure, start);
+            structureStarts.put(mcStructure, start);
         }
     }
 
@@ -253,13 +242,17 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public void placeStagedStructure(int stage)
     {
         if(stage == this.stage) return;
-        if (level == null || structureStartContext == null || structure == null) return;
+        if (level == null || structureStartContext == null || structureConcept == null) return;
+        if(!(chunk instanceof LevelChunk)) return;
+        if(!ManagedChunkUtility.isChunkFullyLoaded(level, id)) return;
+        this.stage = stage;
 
-        StructureConcept.StructureConceptStage conceptStage = structure.getStage(stage);
+        StructureConcept.StructureConceptStage conceptStage = structureConcept.getStage(stage);
         if (conceptStage == null || conceptStage.isEmpty()) return;
 
-        StructureStart structureStart = chunk.getStartForStructure(
-            MOD_CONFIG.structure(conceptStage.getStructureLoc()));
+        Structure structure = MOD_CONFIG.structure(conceptStage.getStructureLoc());
+        StructureStart structureStart = chunk.getStartForStructure(structure);
+        if(structureStart == null) return;
         if (!structureStart.isValid()) return;
 
         // Replicate seed setup from applyBiomeDecoration ($$9, $$10)
@@ -269,47 +262,13 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));
         long decorationSeed = random.setDecorationSeed(level.getSeed(), origin.getX(), origin.getZ());
 
-        // Feature seed: step ordinal ($$15) and feature index 0 ($$16)
-        Structure mcStructure = structureStartContext.structure;
-        random.setFeatureSeed(decorationSeed, 0, mcStructure.step().ordinal());
+        random.setFeatureSeed(decorationSeed, 0, structure.step().ordinal());
 
-        // Iterate every chunk the structure's bounding box touches
-        BoundingBox bbox = structureStart.getBoundingBox();
-        int minCX = SectionPos.blockToSectionCoord(bbox.minX());
-        int maxCX = SectionPos.blockToSectionCoord(bbox.maxX());
-        int minCZ = SectionPos.blockToSectionCoord(bbox.minZ());
-        int maxCZ = SectionPos.blockToSectionCoord(bbox.maxZ());
-
-        for (int cx = minCX; cx <= maxCX; cx++) {
-            for (int cz = minCZ; cz <= maxCZ; cz++) {
-
-                // Build 3x3 region; dz-outer/dx-inner puts (dx=0,dz=0) at index 4 = list.size()/2
-                List<ChunkAccess> regionChunks = new ArrayList<>(9);
-                for (int dz = -1; dz <= 1; dz++) {
-                    for (int dx = -1; dx <= 1; dx++) {
-                        regionChunks.add(level.getChunk(cx + dx, cz + dz, ChunkStatus.STRUCTURE_STARTS));
-                    }
-                }
-
-                WorldGenRegion region = new WorldGenRegion(level, regionChunks, ChunkStatus.FEATURES, 0);
-                StructureManager regionManager = level.structureManager().forWorldGenRegion(region);
-
-                // Writable area mirrors ChunkGenerator::getWritableArea
-                ChunkPos cp = new ChunkPos(cx, cz);
-                BoundingBox writableArea = new BoundingBox(
-                    cp.getMinBlockX(), chunk.getMinBuildHeight() + 1, cp.getMinBlockZ(),
-                    cp.getMaxBlockX(), chunk.getMaxBuildHeight() - 1, cp.getMaxBlockZ()
-                );
-
-                structureStart.placeInChunk(region, regionManager, level.getChunkSource().getGenerator(), random, writableArea, cp);
-                chunk.setUnsaved(true);
-            }
-        }
-
-        this.stage = stage;
+        // Pass level directly so setBlock routes through ServerLevel → client notifications are sent
+        BoundingBox fullBBox = structureStart.getBoundingBox();
+        structureStart.placeInChunk(level, level.structureManager(), level.getChunkSource().getGenerator(), random, fullBBox, pos);
+        chunk.setUnsaved(true);
     }
-
-
 
 
 
@@ -317,12 +276,13 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     @Override
     public CompoundTag serializeNBT() {
+        if(this==DEFAULT) return new CompoundTag();
         CompoundTag tag = new CompoundTag();
         tag.putString("id", this.id);
         tag.putInt("stage", this.stage);
 
-        if (structure != null) {
-            tag.putString("structure", structure.getStructureConceptId());
+        if (structureConcept != null) {
+            tag.putString("structure", structureConcept.getStructureConceptId());
         }
 
         //LoggerProject.logDebug(CLASS_ID + "001", "Serializing ManagedTimedStructureChunk: " + tag);
@@ -331,6 +291,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     @Override
     public void deserializeNBT(CompoundTag tag) {
+        if(this==DEFAULT) return;
         if (tag == null || tag.isEmpty()) return;
 
         this.id = tag.getString("id");
@@ -339,9 +300,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         String conceptId = tag.getString("structure");
         if (conceptId != null && !conceptId.isEmpty()) {
-            this.structure = MOD_CONFIG.getStructureConcept(conceptId);
+            this.structureConcept = MOD_CONFIG.getStructureConcept(conceptId);
         }
         StructureConceptManager.addManagedChunk(level, this);
     }
 
+    public StructureConcept getStructureConcept() {
+        return structureConcept;
+    }
 }
