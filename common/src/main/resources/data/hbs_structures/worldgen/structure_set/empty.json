@@ -1,16 +1,14 @@
 {
   "structures": [
     {
-      "structure": "hbs_structures:challenge_temple",
+      "structure": "hbs_structures:empty",
       "weight": 1
     }
   ],
   "placement": {
     "type": "minecraft:random_spread",
-    "salt": 526287558,
-    "spacing": 4096,
-    "x_offset": 8,
-    "z_offset": 8,
-    "separation": 0
+    "spacing": 32,
+    "separation": 8,
+    "salt": 917231
   }
 }
