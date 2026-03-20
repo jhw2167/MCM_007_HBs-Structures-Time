@@ -22,7 +22,7 @@ public abstract class StructureManagerMixin {
     @Shadow
     private LevelAccessor level;
 
-    @Inject(method = "setStartForStructure", at = @At("HEAD"))
+    @Inject(method = "setStartForStructure", at = @At("RETURN"))
     private void onSetStartForStructure(
         SectionPos sectionPos,
         Structure structure,
@@ -40,8 +40,7 @@ public abstract class StructureManagerMixin {
                 structure,
                 structureStart,
                 structureAccess,
-                serverLevel,
-                ci
+                serverLevel
             );
 
         StructureConceptManager.onSetStartForStructure(ctx);

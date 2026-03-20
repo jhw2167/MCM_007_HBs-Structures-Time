@@ -2,6 +2,7 @@ package com.holybuckets.structures;
 
 
 import com.holybuckets.foundation.event.EventRegistrar;
+import com.holybuckets.structures.command.CommandList;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.StructuresTimeConfig;
 import com.holybuckets.structures.core.StructureConceptManager;
@@ -37,6 +38,7 @@ public class StructuresOverTimeMain {
             */
 
         //Events
+        CommandList.register();
         EventRegistrar registrar = EventRegistrar.getInstance();
         //ChallengeBlockBehavior.init(registrar);
 

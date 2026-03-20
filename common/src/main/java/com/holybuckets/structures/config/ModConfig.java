@@ -3,6 +3,7 @@ package com.holybuckets.structures.config;
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.EventRegistrar;
+import com.holybuckets.structures.Constants;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.model.StructureConcept;
 import com.holybuckets.structures.config.model.StructureConcept.StructureConceptStage;
@@ -34,6 +35,7 @@ public class ModConfig {
     private static ModConfig INSTANCE;
     private StructureConceptJsonConfig structureConceptConfig;
     private Map<ResourceLocation, StructureConcept> activeStructureConcepts;
+    private Registry<Structure> registry;
 
     public static ModConfig getInstance() {
         if (INSTANCE == null) {
@@ -76,7 +78,9 @@ public class ModConfig {
 
     private void initStructures(MinecraftServer server)
     {
-        Registry<Structure> registry = server.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        this.registry = server.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        EMPTY_STRUCT = registry.getOptional(new ResourceLocation(Constants.MOD_ID,
+        "empty")).orElse(null);
 
         for (StructureConcept concept : structureConceptConfig.getAllConcepts())
         {
@@ -111,7 +115,7 @@ public class ModConfig {
                         + ": structureId '" + stageStructId + "' not found in registry, removing stage");
                     stagesToRemove.add(stage.getStage());
                 } else {
-                    stage.setStructureHolder(stageHolder);
+                    stage.setStructureLoc(stageHolder);
                 }
             }
 
@@ -144,7 +148,9 @@ public class ModConfig {
         return (s != null) ? loc : null;
     }
 
-    private void onBeforeServerStarted() {
+    public static Structure EMPTY_STRUCT;
+    private void onBeforeServerStarted()
+    {
         MinecraftServer server = GeneralConfig.getInstance().getServer();
         StructuresTimeConfig activeConfig = Balm.getConfig().getActiveConfig(StructuresTimeConfig.class);
         String configPath = activeConfig.structureRulesConfig;
@@ -190,5 +196,13 @@ public class ModConfig {
 
     public boolean isActiveStructure(ResourceLocation structureLoc) {
         return activeStructureConcepts.containsKey(structureLoc);
+    }
+
+    public ResourceLocation loc(Structure s) {
+        return registry.getKey(s);
+    }
+
+    public Structure structure(ResourceLocation loc) {
+        return registry.get(loc);
     }
 }

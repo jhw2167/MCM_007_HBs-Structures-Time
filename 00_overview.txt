@@ -32,4 +32,20 @@ I want to make an exact copy of the Minecraft Overworld, it's structures, terrai
 - 
 Track Players Near Structures - need to know if player has actually discovered structures, more than structures that were just chunk loaded at some point. For when we start random chunk loading to find structures.
 - need to start saving client data on client side, we can do json in client folder
+
+
+
+  try {
+                                p_223087_.setCurrentlyGenerating($$19);
+                                p_223089_.startsForStructure($$4, $$18).forEach((p_223086_) -> {
+                                    p_223086_.placeInChunk(p_223087_, p_223089_, this, $$9, getWritableArea(p_223088_), $$3);
+                                });
+                            } catch (Exception var29) {
+                                Exception $$20 = var29;
+                                CrashReport $$21 = CrashReport.forThrowable($$20, "Feature placement");
+                                var10000 = $$21.addCategory("Feature");
+                                Objects.requireNonNull($$19);
+                                var10000.setDetail("Description", $$19::get);
+                                throw new ReportedException($$21);
+                            }
 - 

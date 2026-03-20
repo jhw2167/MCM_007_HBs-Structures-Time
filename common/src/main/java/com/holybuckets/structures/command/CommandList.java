@@ -2,6 +2,7 @@ package com.holybuckets.structures.command;
 
 //Project imports
 
+import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.CommandRegistry;
 import com.holybuckets.structures.LoggerProject;
@@ -24,12 +25,12 @@ import java.util.List;
 public class CommandList {
 
     public static final String CLASS_ID = "033";
-    private static final String PREFIX = "hbTemples";
+    private static final String PREFIX = "hbStructures";
 
     public static void register() {
-        CommandRegistry.register(LocateClusters::noArgs);
-        CommandRegistry.register(LocateClusters::limitCount);
-        CommandRegistry.register(LocateClusters::limitCountSpecifyBlockType);
+        //CommandRegistry.register(LocateClusters::noArgs);
+        //CommandRegistry.register(LocateClusters::limitCount);
+        //CommandRegistry.register(LocateClusters::limitCountSpecifyBlockType);
         CommandRegistry.register(SetGlobalStage::withStageArg);
     }
 
@@ -122,7 +123,7 @@ public class CommandList {
                 return 0;
             }
 
-            StructureConceptManager.setGlobalStage(stage);
+            StructureConceptManager.setGlobalStage(GeneralConfig.OVERWORLD, stage);
             source.sendSuccess(() -> Component.literal("Global stage set to " + stage + "."), true);
             return 1;
         }

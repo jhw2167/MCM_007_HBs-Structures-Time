@@ -20,15 +20,8 @@ public class CommonClass {
         if (isInitialized)
             return;
 
-        Constants.LOG.info("Hello from Common init on {}! we are currently in a {} environment!", com.holybuckets.structures.platform.Services.PLATFORM.getPlatformName(), com.holybuckets.structures.platform.Services.PLATFORM.getEnvironmentName());
-        Constants.LOG.info("The ID for diamonds is {}", BuiltInRegistries.ITEM.getKey(Items.DIAMOND));
-
         //Initialize Foundations
         com.holybuckets.foundation.FoundationInitializers.commonInitialize();
-
-        if (Services.PLATFORM.isModLoaded(Constants.MOD_ID)) {
-            Constants.LOG.info("Hello to " + Constants.MOD_NAME + "!");
-        }
 
         //RegisterConfigs
         Balm.getConfig().registerConfig(StructuresTimeConfig.class);

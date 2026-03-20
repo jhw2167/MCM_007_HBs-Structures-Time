@@ -3,7 +3,6 @@ package com.holybuckets.structures.config.model;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.levelgen.structure.Structure;
 
@@ -27,16 +26,24 @@ import java.util.List;
  */
 public class StructureConcept {
 
+    public boolean hasStructure(ResourceLocation loc) {
+        if (loc == null) return false;
+        for (StructureConceptStage stage : stages) {
+            if (stage.is(loc)) return true;
+        }
+        return false;
+    }
+
     public static class StructureConceptStage {
 
         private final int stage;
         private final String structureId;
-        private ResourceLocation structureHolder;
+        private ResourceLocation structureLoc;
 
         public StructureConceptStage(int stage, String structureId) {
             this.stage = stage;
             this.structureId = (structureId == null) ? "" : structureId;
-            this.structureHolder = null;
+            this.structureLoc = null;
         }
 
         // -- Getters --
@@ -50,13 +57,17 @@ public class StructureConcept {
         }
 
         @Nullable
-        public ResourceLocation getStructureHolder() {
-            return structureHolder;
+        public ResourceLocation getStructureLoc() {
+            return structureLoc;
         }
 
         /** Returns true if this stage has an actual structure to place. */
         public boolean hasStructure() {
             return !structureId.isEmpty() && !structureId.equalsIgnoreCase("empty");
+        }
+
+        public boolean is(ResourceLocation s) {
+            return structureLoc != null && s != null && structureLoc.equals(s);
         }
 
         /** Returns true if this stage explicitly removes / leaves empty. */
@@ -67,8 +78,8 @@ public class StructureConcept {
         // -- Registry resolution --
 
         /** Set the resolved Holder after registry lookup in ModConfig. */
-        public void setStructureHolder(ResourceLocation holder) {
-            this.structureHolder = holder;
+        public void setStructureLoc(ResourceLocation holder) {
+            this.structureLoc = holder;
         }
 
         // -- Serialization --

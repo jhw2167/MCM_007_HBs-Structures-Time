@@ -7,6 +7,9 @@ import com.holybuckets.foundation.event.EventRegistrar;
 import com.holybuckets.foundation.event.custom.DatastoreSaveEvent;
 import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.event.custom.TickType;
+import com.google.gson.JsonPrimitive;
+import com.holybuckets.foundation.datastore.WorldSaveData;
+import com.holybuckets.structures.Constants;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
@@ -30,7 +33,6 @@ import net.minecraft.world.level.levelgen.structure.StructureSet;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.minecraft.world.level.chunk.StructureAccess;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.*;
 
@@ -47,9 +49,12 @@ public class StructureConceptManager {
 
     public static final String CLASS_ID = "011";
 
+    private static final String KEY_GLOBAL_STAGE = "globalStage";
+
     private final ServerLevel level;
     private final Registry<Structure> registry;
-    private final Map<String, ManagedStructureConceptChunk> managedChunks;
+    private final Map<ChunkPos, ManagedStructureConceptChunk> managedChunks;
+    private int globalStage;
 
 
     //** STATICS
@@ -63,9 +68,13 @@ public class StructureConceptManager {
         this.level = level;
         this.registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         this.managedChunks = new HashMap<>();
+        this.globalStage = 1;
         MANAGERS.put(level, this);
         LoggerProject.logInit(CLASS_ID + "000", StructureConceptManager.class.getName());
     }
+
+
+
 
     private ResourceLocation getStructureId(Structure s) {
         return registry.getKey(s);
@@ -87,7 +96,6 @@ public class StructureConceptManager {
 
         if( MOD_CONFIG.isActiveStructure(getStructureId(ctx.structure)) ) {
             registerManagedChunk(ctx);
-            ctx.ci.cancel();
         }
     }
 
@@ -110,38 +118,55 @@ public class StructureConceptManager {
         return level;
     }
 
-    public Map<String, ManagedStructureConceptChunk> getManagedChunks() {
+    public Map<ChunkPos, ManagedStructureConceptChunk> getManagedChunks() {
         return Collections.unmodifiableMap(managedChunks);
     }
 
-    public ManagedStructureConceptChunk getManagedChunk(String chunkId) {
+    public ManagedStructureConceptChunk getManagedChunk(ChunkPos chunkId) {
         return managedChunks.get(chunkId);
+    }
+
+    public static ManagedStructureConceptChunk getManagedChunk(LevelAccessor level, ChunkPos cp) {
+        StructureConceptManager manager = MANAGERS.get(level);
+        if (manager == null) return null;
+        return manager.managedChunks.get(cp);
     }
 
     public static StructureConceptManager get(LevelAccessor level) {
         return MANAGERS.get(level);
     }
 
-
-    private void onChunkLoad(ChunkAccess chunk) {
-        String chunkId = ChunkUtil.getId(chunk.getPos());
-
-        if (managedChunks.containsKey(chunkId)) {
-            ManagedStructureConceptChunk managed = managedChunks.get(chunkId);
-            managed.setLevel(level);
-            LoggerProject.logDebug(CLASS_ID + "010",
-                "Chunk loaded with timed structure: " + chunkId);
+    public static void addManagedChunk(ServerLevel level, ManagedStructureConceptChunk managedStructureConceptChunk) {
+        StructureConceptManager manager = MANAGERS.get(level);
+        if (manager != null) {
+            manager.managedChunks.put(managedStructureConceptChunk.getChunkPos(), managedStructureConceptChunk);
         }
     }
 
-    private void onChunkUnload(ChunkAccess chunk) {
-        String chunkId = ChunkUtil.getId(chunk.getPos());
+    //** CORE
+    public boolean isManagedChunk(ChunkPos chunkPos) {
+        return managedChunks.containsKey(chunkPos);
+    }
+    /** Returns true if the structure at this chunk position is managed and should be hidden from vanilla. */
+    public boolean isStructureValidForStage(ChunkPos chunkPos, Structure structure) {
+            ManagedStructureConceptChunk chunk = managedChunks.get(chunkPos);
+            if(chunk == null) return true;
+            if(!chunk.hasStructureInConcept(structure)) return true;
+            return chunk.isStructureValidForStage(structure);
+    }
 
-        if (managedChunks.containsKey(chunkId)) {
-            LoggerProject.logDebug(CLASS_ID + "011",
-                "Chunk unloaded with timed structure: " + chunkId);
+    public void setManagerStage(int stage) {
+        this.globalStage = stage;
+    }
+
+    public static void setGlobalStage(Level level, int stage) {
+        StructureConceptManager manager = MANAGERS.get(level);
+        if (manager != null) {
+            manager.setManagerStage(stage);
         }
     }
+
+
 
     /**
      * Registers a new ManagedStructureConceptChunk for the given chunk id.
@@ -151,16 +176,16 @@ public class StructureConceptManager {
      */
     public ManagedStructureConceptChunk registerManagedChunk(StructureSetStartContext ctx)
     {
-        String chunkId = ChunkUtil.getId(ctx.sectionPos.chunk());
-        if (managedChunks.containsKey(chunkId)) {
-            return managedChunks.get(chunkId);
+        ChunkPos cp = ctx.sectionPos.chunk();
+        String id = ChunkUtil.getId(cp);
+        if (managedChunks.containsKey(cp)) {
+             return managedChunks.get(cp);
         }
-        ManagedStructureConceptChunk managed = ManagedStructureConceptChunk.getInstance(level, chunkId);
-        managed.setStructureStartContext(ctx, getStructureId(ctx.structure));
-        managed.setStage();
+        ManagedStructureConceptChunk managed = ManagedStructureConceptChunk.getInstance(level, id);
+        managed.setStructureStartContext(ctx, getStructureId(ctx.structure), globalStage);
 
-        managedChunks.put(chunkId, managed);
-        LoggerProject.logDebug(CLASS_ID + "020", "Registered timed structure chunk: " + chunkId);
+        managedChunks.put(cp, managed);
+        LoggerProject.logDebug(CLASS_ID + "020", "Registered timed structure chunk: " + cp);
         return managed;
     }
 
@@ -169,26 +194,45 @@ public class StructureConceptManager {
     }
 
     private void onDailyTick() {
-        // TODO: Implement daily progression logic
+        for(ManagedStructureConceptChunk chunk : managedChunks.values()) {
+            chunk.placeStagedStructure(this.globalStage);
+        }
     }
 
     private void load(DataStore ds) {
-        // TODO: Load managed timed structure chunks from datastore
+        WorldSaveData worldData = ds.getOrCreateWorldSaveData(Constants.MOD_ID);
+        com.google.gson.JsonElement stageEl = worldData.get(KEY_GLOBAL_STAGE);
+        this.globalStage = (stageEl != null) ? stageEl.getAsInt() : 1;
+        LoggerProject.logDebug(CLASS_ID + "001", "Loaded globalStage: " + globalStage);
     }
 
     private void save(DataStore ds) {
-        // TODO: Save managed timed structure chunks to datastore
+        WorldSaveData worldData = ds.getOrCreateWorldSaveData(Constants.MOD_ID);
+        worldData.addProperty(KEY_GLOBAL_STAGE, new JsonPrimitive(this.globalStage));
+        LoggerProject.logDebug(CLASS_ID + "002", "Saved globalStage: " + globalStage);
     }
 
-    /**
-     * Static initialization - subscribes static methods to events
-     **/
+
+    //** STATICS:
+
+    public static boolean isManagedChunk(ServerLevel level, ChunkPos pos) {
+        if(level.isClientSide()) return false;
+        StructureConceptManager manager = MANAGERS.get(level);
+        if (manager == null) return false;
+        return manager.managedChunks.containsKey(pos);
+    }
+
+
+
+    //** EVENTS
+
     public static void init(EventRegistrar reg) {
         reg.registerOnBeforeServerStarted(StructureConceptManager::onServerStart);
         reg.registerOnLevelLoad(StructureConceptManager::onLevelLoad, EventPriority.High);
-        reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
-        reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
-        reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::onDailyTickEvent);
+        //reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
+        //reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
+        //reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::onDailyTickEvent);
+        reg.registerOnServerTick(TickType.ON_20_TICKS, StructureConceptManager::onDailyTickEvent);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
 
         ManagedStructureConceptChunk.registerManagedChunkData();
@@ -212,32 +256,12 @@ public class StructureConceptManager {
         manager.load(GeneralConfig.getInstance().getDataStore());
     }
 
-    private static void onChunkLoadEvent(ChunkLoadingEvent.Load event) {
-        if (event.getLevel().isClientSide()) return;
-
-        ServerLevel serverLevel = (ServerLevel) event.getLevel();
-        StructureConceptManager manager = MANAGERS.get(serverLevel);
-        if (manager != null) {
-            manager.onChunkLoad(event.getChunk());
-        }
-    }
-
-
-    private static void onChunkUnloadEvent(ChunkLoadingEvent.Unload event) {
-        if (event.getLevel().isClientSide()) return;
-
-        ServerLevel serverLevel = (ServerLevel) event.getLevel();
-        StructureConceptManager manager = MANAGERS.get(serverLevel);
-        if (manager != null) {
-            manager.onChunkUnload(event.getChunk());
-        }
-    }
-
     private static void onDailyTickEvent(ServerTickEvent event) {
         for(StructureConceptManager manager : MANAGERS.values()) {
             manager.onDailyTick();
         }
     }
+
 
     private static void onDataSave(DatastoreSaveEvent event) {
         for(StructureConceptManager manager : MANAGERS.values()) {
@@ -319,23 +343,20 @@ public class StructureConceptManager {
         public final Structure structure;
         public final StructureStart structureStart;
         public final StructureAccess structureAccess;
-        public ServerLevel serverLevel;
-        public CallbackInfo ci;
+        public final ServerLevel serverLevel;
 
         public StructureSetStartContext(
             SectionPos sectionPos,
             Structure structure,
             StructureStart structureStart,
             StructureAccess structureAccess,
-            ServerLevel serverLevel,
-            CallbackInfo ci
+            ServerLevel serverLevel
         ) {
             this.sectionPos = sectionPos;
             this.structure = structure;
             this.structureStart = structureStart;
             this.structureAccess = structureAccess;
             this.serverLevel = serverLevel;
-            this.ci = ci;
         }
     }
 }
