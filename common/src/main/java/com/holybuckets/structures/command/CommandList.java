@@ -96,8 +96,8 @@ public class CommandList {
     //2. Set Global Stage
     private static class SetGlobalStage
     {
-        private static final int MIN_STAGE = 1;
-        private static final int MAX_STAGE = 4;
+        private static final int MIN_STAGE = 0;
+        private static final int MAX_STAGE = 16;
 
         // Register command with stage argument
         private static LiteralArgumentBuilder<CommandSourceStack> withStageArg() {

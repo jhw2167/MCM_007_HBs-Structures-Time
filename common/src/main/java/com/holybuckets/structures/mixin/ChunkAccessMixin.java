@@ -43,7 +43,9 @@ public abstract class ChunkAccessMixin {
         }
     }
 
+
     /*
+    Mixin causes infinite hang in while loop of ChunkGenerator::applyBiomeDecoration
     @Inject(method = "getStartForStructure", at = @At("RETURN"), cancellable = true)
     private void onGetStartForStructure(Structure structure, CallbackInfoReturnable<StructureStart> cir) {
         if( !StructureConceptManager.isManagedChunk(GeneralConfig.OVERWORLD, getPos())) return;
@@ -52,6 +54,7 @@ public abstract class ChunkAccessMixin {
             cir.setReturnValue(StructureStart.INVALID_START);
         }
     }
-    */
+     */
+
 
 }

@@ -68,7 +68,7 @@ public class StructureConceptManager {
         this.level = level;
         this.registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         this.managedChunks = new HashMap<>();
-        this.globalStage = 1;
+        this.globalStage = 0;
         MANAGERS.put(level, this);
         LoggerProject.logInit(CLASS_ID + "000", StructureConceptManager.class.getName());
     }
@@ -120,10 +120,11 @@ public class StructureConceptManager {
         // If this is a managed chunk, place the appropriate stage of the structure.
         ManagedStructureConceptChunk managedChunk = managedChunks.get(chunkPos);
         if (managedChunk != null) {
-            ManagedStructureConceptChunk.setInstance(event.getLevel(), chunkId, managedChunk);
             managedChunk.handleChunkLoaded(event);
             String structId = managedChunk.getStructureConcept().getStructureConceptId();
             LoggerProject.logDebug(CLASS_ID + "032", "Chunk loaded: " + chunkId + " " + structId );
+        } else {
+            ManagedStructureConceptChunk.setInstance(event.getLevel(), chunkId, ManagedStructureConceptChunk.DEFAULT);
         }
     }
 
@@ -163,10 +164,13 @@ public class StructureConceptManager {
     }
     /** Returns true if the structure at this chunk position is managed and should be hidden from vanilla. */
     public boolean isStructureValidForStage(ChunkPos chunkPos, Structure structure) {
-            ManagedStructureConceptChunk chunk = managedChunks.get(chunkPos);
-            if(chunk == null) return true;
-            if(!chunk.hasStructureInConcept(structure)) return true;
+        ManagedStructureConceptChunk chunk = managedChunks.get(chunkPos);
+        if(chunk == null) return true;
+        if(chunk.hasStructureInConcept(structure))
             return chunk.isStructureValidForStage(structure);
+        if(chunk.isSourceStructure(structure)) return false;
+
+        return true;
     }
 
     public void setManagerStage(int stage) {
@@ -217,7 +221,7 @@ public class StructureConceptManager {
     private void load(DataStore ds) {
         WorldSaveData worldData = ds.getOrCreateWorldSaveData(Constants.MOD_ID);
         com.google.gson.JsonElement stageEl = worldData.get(KEY_GLOBAL_STAGE);
-        this.globalStage = (stageEl != null) ? stageEl.getAsInt() : 1;
+        this.globalStage = (stageEl != null) ? stageEl.getAsInt() : 0;
         LoggerProject.logDebug(CLASS_ID + "001", "Loaded globalStage: " + globalStage);
     }
 

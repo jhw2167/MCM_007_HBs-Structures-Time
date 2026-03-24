@@ -11,8 +11,10 @@ import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
 import net.blay09.mods.balm.api.event.server.ServerStoppedEvent;
+import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.levelgen.structure.Structure;
@@ -195,14 +197,21 @@ public class ModConfig {
     }
 
     public boolean isActiveStructure(ResourceLocation structureLoc) {
+        if(structureLoc == null) return false;
         return activeStructureConcepts.containsKey(structureLoc);
     }
 
     public ResourceLocation loc(Structure s) {
+        if(s == null) return null;
         return registry.getKey(s);
     }
 
     public Structure structure(ResourceLocation loc) {
         return registry.get(loc);
+    }
+
+    public Holder.Reference reference(Structure structure) {
+        if(structure == null) return null;
+        return registry.getHolderOrThrow(registry.getResourceKey(structure).orElseThrow());
     }
 }
