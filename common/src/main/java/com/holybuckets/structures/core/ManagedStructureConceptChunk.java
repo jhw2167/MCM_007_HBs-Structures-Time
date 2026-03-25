@@ -9,6 +9,7 @@ import com.holybuckets.foundation.modelInterface.IMangedChunkData;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
+import com.holybuckets.structures.mixin.ChunkAccessAccessor;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
@@ -73,7 +74,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     /** Default constructor - creates dummy node for deserialization */
     private ManagedStructureConceptChunk() {
         super();
-
+        this.structureStarts = new HashMap<>();
     }
 
     public ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp, StructureSetStartContext ctx, int stage) {
@@ -85,7 +86,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         ResourceLocation sourceStruct = MOD_CONFIG.loc(ctx.structure);
         this.structureConcept = MOD_CONFIG.getStructureConcept(sourceStruct);
         this.stage = stage;
-        this.structureStarts = new HashMap<>();
         generateAllStructureStarts();
     }
 
@@ -146,9 +146,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         chunk = (LevelChunk) event.getChunk();
         level = (ServerLevel) event.getLevel();
 
-        //Add all structureStarts to chunk if it doesnt have them
-        for(Structure s : structureStarts.keySet()) {
-            if(chunk.getStartForStructure(s) == null) {
+        //add all structure starts to chunks
+        if(structureStarts != null && chunk != null) {
+            for(Structure s : structureStarts.keySet()) {
+                if(chunk.getAllStarts().containsKey(s)) continue;
                 chunk.setStartForStructure(s, structureStarts.get(s));
             }
         }
@@ -253,8 +254,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      */
     public void placeStagedStructure(int stage)
     {
-        if(stage < 1 || stage == this.stage) {this.stage = stage; return;}
-        if (level == null || structureStartContext == null || structureConcept == null) return;
+        if(stage < 1 || stage == this.stage) {this.stage = stage; return;}if (level == null || structureConcept == null) return;
         if(!ManagedChunkUtility.isChunkFullyLoaded(level, id)) return;
         if(chunk==null)
             chunk = getParent().getCachedLevelChunk();
@@ -269,6 +269,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if(structureStart == null) return;
         if (!structureStart.isValid()) return;
         this.stage = stage;
+        ChunkRegenerator.regenerateChunk(level, pos);
 
         // Replicate seed setup from applyBiomeDecoration ($$9, $$10)
         BoundingBox box = structureStart.getBoundingBox();
@@ -306,14 +307,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     @Override
     public CompoundTag serializeNBT() {
-        if(this==DEFAULT) return new CompoundTag();
+        if(this==DEFAULT || structureConcept==null) return new CompoundTag();
         CompoundTag tag = new CompoundTag();
         tag.putString("id", this.id);
         tag.putInt("stage", this.stage);
 
-        if (structureConcept != null) {
-            tag.putString("structure", structureConcept.getStructureConceptId());
-        }
+        tag.putString("structure", structureConcept.getStructureConceptId());
 
         //LoggerProject.logDebug(CLASS_ID + "001", "Serializing ManagedTimedStructureChunk: " + tag);
         return tag;

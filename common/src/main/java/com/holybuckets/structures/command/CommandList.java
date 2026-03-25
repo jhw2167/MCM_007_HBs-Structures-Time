@@ -6,6 +6,7 @@ import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.CommandRegistry;
 import com.holybuckets.structures.LoggerProject;
+import com.holybuckets.structures.core.ChunkRegenerator;
 import com.holybuckets.structures.core.StructureConceptManager;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -15,7 +16,9 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.*;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -32,6 +35,7 @@ public class CommandList {
         //CommandRegistry.register(LocateClusters::limitCount);
         //CommandRegistry.register(LocateClusters::limitCountSpecifyBlockType);
         CommandRegistry.register(SetGlobalStage::withStageArg);
+        CommandRegistry.register(RegenerateChunk::noArgs);
     }
 
     //1. Locate Clusters
@@ -128,6 +132,50 @@ public class CommandList {
             return 1;
         }
 
+    }
+    //END COMMAND
+
+
+    //3. Regenerate Chunk
+    private static class RegenerateChunk
+    {
+        // Regenerates terrain for the chunk the player is standing in
+        private static LiteralArgumentBuilder<CommandSourceStack> noArgs() {
+            return Commands.literal(PREFIX)
+                .then(Commands.literal("regenerateChunk")
+                    .executes(context -> execute(context.getSource()))
+                );
+        }
+
+        private static int execute(CommandSourceStack source)
+        {
+            ServerPlayer player = source.getPlayer();
+            if (player == null) {
+                source.sendFailure(Component.literal("This command must be run by a player."));
+                return 0;
+            }
+
+            ServerLevel level = player.serverLevel();
+            BlockPos playerPos = player.blockPosition();
+            ChunkPos chunkPos = new ChunkPos(playerPos);
+
+            source.sendSuccess(() -> Component.literal("Regenerating chunk at " + chunkPos + "..."), true);
+
+            try {
+                boolean success = ChunkRegenerator.regenerateChunk(level, chunkPos);
+                if (success) {
+                    source.sendSuccess(() -> Component.literal("Chunk " + chunkPos + " regenerated."), true);
+                    return 1;
+                } else {
+                    source.sendFailure(Component.literal("Chunk regeneration failed at " + chunkPos + "."));
+                    return 0;
+                }
+            } catch (Exception e) {
+                source.sendFailure(Component.literal("Error: " + e.getMessage()));
+                LoggerProject.logError(CLASS_ID + "003", "Regenerate chunk command failed: " + e.getMessage());
+                return 0;
+            }
+        }
     }
     //END COMMAND
 
