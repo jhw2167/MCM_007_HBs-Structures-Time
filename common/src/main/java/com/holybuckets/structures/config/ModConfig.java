@@ -81,8 +81,12 @@ public class ModConfig {
     private void initStructures(MinecraftServer server)
     {
         this.registry = server.registryAccess().registryOrThrow(Registries.STRUCTURE);
+
         EMPTY_STRUCT = registry.getOptional(new ResourceLocation(Constants.MOD_ID,
-        "empty")).orElse(null);
+            "empty")).orElse(null);
+
+        SKIP_STRUCT = registry.getOptional(new ResourceLocation(Constants.MOD_ID,
+            "skip")).orElse(null);
 
         for (StructureConcept concept : structureConceptConfig.getAllConcepts())
         {
@@ -152,6 +156,7 @@ public class ModConfig {
 
     public static Structure EMPTY_STRUCT;
     public static Structure SKIP_STRUCT;
+
     private void onBeforeServerStarted()
     {
         MinecraftServer server = GeneralConfig.getInstance().getServer();
