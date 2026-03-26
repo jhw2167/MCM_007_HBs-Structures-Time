@@ -151,6 +151,7 @@ public class ModConfig {
     }
 
     public static Structure EMPTY_STRUCT;
+    public static Structure SKIP_STRUCT;
     private void onBeforeServerStarted()
     {
         MinecraftServer server = GeneralConfig.getInstance().getServer();
@@ -213,5 +214,16 @@ public class ModConfig {
     public Holder.Reference reference(Structure structure) {
         if(structure == null) return null;
         return registry.getHolderOrThrow(registry.getResourceKey(structure).orElseThrow());
+    }
+
+    /**
+     * Tests if a structure is our custom "empty" or "skip" structure
+     * returns true on null resource location
+     * @param loc
+     * @return
+     */
+    public boolean isEmptyStructure(ResourceLocation loc) {
+        if(loc==null) return true;
+        return loc.equals(loc(EMPTY_STRUCT)) || loc.equals(loc(SKIP_STRUCT));
     }
 }
