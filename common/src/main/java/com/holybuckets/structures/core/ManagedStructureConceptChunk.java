@@ -3,29 +3,22 @@ package com.holybuckets.structures.core;
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
+import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.foundation.modelInterface.IMangedChunkData;
-import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
-import com.holybuckets.structures.mixin.ChunkAccessAccessor;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.commands.PlaceCommand;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.level.chunk.*;
 import net. minecraft. world. level. levelgen.RandomSupport;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.RandomState;
@@ -37,6 +30,7 @@ import net.minecraft.world.level.levelgen.structure.pieces.StructurePiecesBuilde
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.holybuckets.structures.core.StructureConceptManager.StructureSetStartContext;
 
@@ -54,6 +48,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
 
     static final ManagedStructureConceptChunk DEFAULT = new ManagedStructureConceptChunk();
+    private boolean pendingUpgrade;
+
     public static void registerManagedChunkData() {
         ManagedChunk.registerManagedChunkData(ManagedStructureConceptChunk.class,
             () -> new ManagedStructureConceptChunk());
@@ -67,7 +63,19 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private StructureConcept structureConcept;
     private StructureSetStartContext structureStartContext;
     private LevelChunk chunk;
+    private ProtoChunk protoChunk;
     private Map<Structure, StructureStart> structureStarts;
+    private Structure currentStructure;
+    private StructureStart currentStructureStart;
+    private BoundingBox currentBox;
+    private BoundingBox previousbox;
+
+    private Set<ChunkPos> oldStructureArea = new HashSet<>(); //ChunkPos used by old area
+    private List<ChunkPos> newStructureArea = new ArrayList<>(); //ChunkPos that will be utilized by new structure
+    private Set<ChunkPos> chunksCompleteUpgrade = new HashSet<>(); //ChunkPos that need to be regenerated before structure can be placed
+
+
+
 
     /** Constructors **/
 
@@ -75,6 +83,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private ManagedStructureConceptChunk() {
         super();
         this.structureStarts = new HashMap<>();
+        this.oldStructureArea = new HashSet<>();
+        this.newStructureArea = new ArrayList<>();
     }
 
     public ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp, StructureSetStartContext ctx, int stage) {
@@ -88,6 +98,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.stage = stage;
         generateAllStructureStarts();
     }
+
+    //** Events **/
+    public void onServerTick(ServerTickEvent event) {
+        handleStructureUpgradeOnTick();
+    }
+
 
     /** Getters **/
 
@@ -252,53 +268,160 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      * Places the structure for the given stage using the stored StructureStart context.
      * Mirrors the structure placement loop in ChunkGenerator::applyBiomeDecoration.
      */
-    public void placeStagedStructure(int stage)
+    public void triggerStructureUpgrade(int stage)
     {
+        //1. Check if Chunk is available
         if(stage < 1 || stage == this.stage) {this.stage = stage; return;}if (level == null || structureConcept == null) return;
-        if(!ManagedChunkUtility.isChunkFullyLoaded(level, id)) return;
-        if(chunk==null)
-            chunk = getParent().getCachedLevelChunk();
-        if(!(chunk instanceof LevelChunk))
-            return;
+        if(chunk==null) chunk = getParent().getCachedLevelChunk();
+        if(!(chunk instanceof LevelChunk)) return;
 
+        //2. Check if Structure is available
         StructureConcept.StructureConceptStage conceptStage = structureConcept.getStage(stage);
-        if (conceptStage == null || conceptStage.isEmpty()) return;
+        if (conceptStage == null || conceptStage.isEmpty()) {
+            this.stage = stage;
+            return;
+        }
 
-        Structure structure = MOD_CONFIG.structure(conceptStage.getStructureLoc());
-        StructureStart structureStart = chunk.getStartForStructure(structure);
-        if(structureStart == null) return;
-        if (!structureStart.isValid()) return;
-        this.stage = stage;
-        ChunkRegenerator.regenerateChunk(level, pos);
+        ResourceLocation strLoc = conceptStage.getStructureLoc();
+        if(MOD_CONFIG.isSkipStructure(strLoc)) {
+            this.stage = stage;
+            return;
+        }
 
-        // Replicate seed setup from applyBiomeDecoration ($$9, $$10)
-        BoundingBox box = structureStart.getBoundingBox();
+        //Empty structures are processed to clear the land as well
+        currentStructure = MOD_CONFIG.structure(conceptStage.getStructureLoc());
+        currentStructureStart = chunk.getStartForStructure(currentStructure);
+
+        if(currentStructureStart == null) return;
+        if (!currentStructureStart.isValid()) return;
+
+
+        //3. Obtain all old chunksPos for clearing
+        ResourceLocation prevStructLoc = structureConcept.getStage(this.stage).getStructureLoc();
+        oldStructureArea.clear();
+        newStructureArea.clear();
+        if(!MOD_CONFIG.isEmptyStructure(prevStructLoc))
+        {
+            Structure prevStructure = MOD_CONFIG.structure(prevStructLoc);
+            StructureStart prevStructureStart = chunk.getStartForStructure(prevStructure);
+            BoundingBox prevBox = prevStructureStart.getBoundingBox();
+            ChunkPos prevMinPos = new ChunkPos(SectionPos.blockToSectionCoord(prevBox.minX()), SectionPos.blockToSectionCoord(prevBox.minZ()));
+            ChunkPos prevMaxPos = new ChunkPos(SectionPos.blockToSectionCoord(prevBox.maxX()), SectionPos.blockToSectionCoord(prevBox.maxZ()));
+            ChunkPos.rangeClosed(prevMinPos, prevMaxPos).forEach(oldStructureArea::add);
+        }
+
+
+        //4. Check if all chunks are available for chunk regeneration
+        BoundingBox box = currentStructureStart.getBoundingBox();
         ChunkPos minPos = new ChunkPos(SectionPos.blockToSectionCoord(box.minX()), SectionPos.blockToSectionCoord(box.minZ()));
         ChunkPos maxPos = new ChunkPos(SectionPos.blockToSectionCoord(box.maxX()), SectionPos.blockToSectionCoord(box.maxZ()));
+        previousbox = currentBox;
+        currentBox = box;
+
+        ChunkPos.rangeClosed(minPos, maxPos).forEach(newStructureArea::add);
+
+        chunksCompleteUpgrade.clear();
+        this.stage = stage;
+        this.pendingUpgrade = true;
+
+    }
+
+    private void handleStructureUpgradeOnTick()
+    {
+        if(!pendingUpgrade) return;
+
+        //1. Process newStructureArea for placing new structure
+        for(ChunkPos newPos : newStructureArea)
+        {
+            if(chunksCompleteUpgrade.contains(newPos)) continue;
+            boolean res = regenerateTerrain(newPos, false);
+            if(res) {
+                if( generateStructureInChunk(newPos) )
+                    chunksCompleteUpgrade.add(newPos);
+            }
+            return; //one chunk at a time
+        }
+
+        //2. Process oldStructureArea for clearing
+        for(ChunkPos oldPos : oldStructureArea) {
+            if(chunksCompleteUpgrade.contains(oldPos)) continue;
+            boolean res = regenerateTerrain(oldPos, true);
+            if(res) chunksCompleteUpgrade.add(oldPos);
+            return; //one chunk at a time
+        }
+
+        pendingUpgrade = false;
+
+    }
+
+    private boolean regenerateTerrain(ChunkPos pos, boolean applyDecoration)
+    {
+        if(previousbox == null) return true; //no terrain to regenerate
+        ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
+        if(util==null) return false;
+        if(!util.isChunkFullyLoaded(pos)) return false;
+
+        ProtoChunk proto = ChunkRegenerator.createProtoChunk(level, pos);
+
+        BoundingBox structureRange = new BoundingBox(
+            pos.getMinBlockX(), previousbox.minY(), pos.getMinBlockZ(),
+            pos.getMaxBlockX(), previousbox.maxY(), pos.getMaxBlockZ()
+        );
+
+        List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 8);
+        boolean allLoaded = localChunks.stream().allMatch(util::isChunkFullyLoaded);
+        if(!allLoaded) return false;
+        List<ChunkAccess> chunks = localChunks.stream()
+            .map(id -> util.getManagedChunk(id).getCachedLevelChunk())
+            .collect(Collectors.toList());
+
+        return ChunkRegenerator.resetTerrain(proto, level, pos, structureRange, chunks, applyDecoration);
+    }
+
+    private boolean generateStructureInChunk(ChunkPos pos)
+    {
+        if(currentStructureStart == null) return false;
+        if(chunk==null) chunk = getParent().getCachedLevelChunk();
+        if(!(chunk instanceof LevelChunk)) return false;
+
+        WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));
+        long decorationSeed = random.setDecorationSeed(level.getSeed(), currentBox.minX(), currentBox.minZ());
+        random.setFeatureSeed(decorationSeed, 0, currentStructure.step().ordinal());
+
+        currentStructureStart.placeInChunk(level, level.structureManager(), level.getChunkSource().getGenerator(), random,
+            currentBox, pos);
+        return true;
+    }
+
+    /*
+
+        ChunkRegenerator.regenerateChunk(level, pos);
 
         WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));
         long decorationSeed = random.setDecorationSeed(level.getSeed(), box.minX(), box.minZ());
         random.setFeatureSeed(decorationSeed, 0, structure.step().ordinal());
 
         // Pass level directly so setBlock routes through ServerLevel → client notifications are sent
-    ChunkPos.rangeClosed(minPos, maxPos).forEach(chunkPos -> {
-        structureStart.placeInChunk(level, level.structureManager(), level.getChunkSource().getGenerator(), random,
-        new BoundingBox(chunkPos.getMinBlockX(), level.getMinBuildHeight(), chunkPos.getMinBlockZ(), chunkPos.getMaxBlockX(), level.getMaxBuildHeight(), chunkPos.getMaxBlockZ()), chunkPos);
-    });
+        ChunkPos.rangeClosed(minPos, maxPos).forEach(chunkPos -> {
+            structureStart.placeInChunk(level, level.structureManager(), level.getChunkSource().getGenerator(), random,
+                new BoundingBox(chunkPos.getMinBlockX(), level.getMinBuildHeight(), chunkPos.getMinBlockZ(), chunkPos.getMaxBlockX(), level.getMaxBuildHeight(), chunkPos.getMaxBlockZ()), chunkPos);
+        });
+
+     */
 
 
+    //Applies decoration step to the protochunk which also regenerates the structure -- need to hold onto the protochunk to use this
+    private void applyChunkRedecoration(StructureStart structureStart) {
+        if (level == null || structureStart == null) return;
+        if(chunk==null)
+            chunk = getParent().getCachedLevelChunk();
+        if(!(chunk instanceof LevelChunk))
+            return;
 
-     /*
-        try {
-            PlaceCommand.placeStructure( GENERAL_CONFIG.getServer().createCommandSourceStack(), ref,
-                structureStart.getChunkPos().getWorldPosition());
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "002", "Error placing structure: " + e.getMessage());
-        }
+        /*
+        generator.applyBiomeDecoration(region, protoChunk, level.structureManager().forWorldGenRegion(region));
+        protoChunk.setStatus(ChunkStatus.FEATURES);
         */
-
-
-        chunk.setUnsaved(true);
     }
 
 
@@ -310,6 +433,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if(this==DEFAULT || structureConcept==null) return new CompoundTag();
         CompoundTag tag = new CompoundTag();
         tag.putString("id", this.id);
+
+        if(this.pendingUpgrade) stage--;
         tag.putInt("stage", this.stage);
 
         tag.putString("structure", structureConcept.getStructureConceptId());

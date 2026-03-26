@@ -75,6 +75,10 @@ public class StructureConcept {
             return structureId.isEmpty() || structureId.equalsIgnoreCase("empty");
         }
 
+        public boolean isSkip() {
+            return structureId.equalsIgnoreCase("skip");
+        }
+
         // -- Registry resolution --
 
         /** Set the resolved Holder after registry lookup in ModConfig. */

@@ -214,7 +214,7 @@ public class StructureConceptManager {
 
     private void onDailyTick() {
         for(ManagedStructureConceptChunk chunk : managedChunks.values()) {
-            chunk.placeStagedStructure(this.globalStage);
+            chunk.triggerStructureUpgrade(this.globalStage);
         }
     }
 
@@ -251,7 +251,8 @@ public class StructureConceptManager {
         reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
         //reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
         //reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::onDailyTickEvent);
-        reg.registerOnServerTick(TickType.ON_20_TICKS, StructureConceptManager::onDailyTickEvent);
+        reg.registerOnServerTick(TickType.ON_120_TICKS, StructureConceptManager::onDailyTickEvent);
+        reg.registerOnServerTick(TickType.ON_20_TICKS, StructureConceptManager::onServerTick);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
 
         ManagedStructureConceptChunk.registerManagedChunkData();
@@ -292,6 +293,12 @@ public class StructureConceptManager {
             manager.onDailyTick();
         }
     }
+
+        private static void onServerTick(ServerTickEvent event) {
+            for(StructureConceptManager manager : MANAGERS.values()) {
+                manager.managedChunks.values().forEach(chunk -> chunk.onServerTick(event));
+            }
+        }
 
 
     private static void onDataSave(DatastoreSaveEvent event) {

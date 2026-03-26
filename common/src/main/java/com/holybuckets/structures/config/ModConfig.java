@@ -229,6 +229,22 @@ public class ModConfig {
      */
     public boolean isEmptyStructure(ResourceLocation loc) {
         if(loc==null) return true;
-        return loc.equals(loc(EMPTY_STRUCT)) || loc.equals(loc(SKIP_STRUCT));
+        return loc.equals(loc(EMPTY_STRUCT));
     }
+
+    public boolean isEmptyStructure(Structure s) {
+        if(s==null) return true;
+        return s.equals(EMPTY_STRUCT);
+    }
+
+
+    public boolean isSkipStructure(ResourceLocation loc) {
+        if(loc==null) return false;
+        return loc.equals(loc(SKIP_STRUCT));
+    }
+
+        public boolean isSkipStructure(Structure s) {
+            if(s==null) return false;
+            return s.equals(SKIP_STRUCT);
+        }
 }

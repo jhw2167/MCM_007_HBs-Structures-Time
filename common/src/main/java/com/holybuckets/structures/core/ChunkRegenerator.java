@@ -1,36 +1,29 @@
 package com.holybuckets.structures.core;
 
 import com.holybuckets.foundation.HBUtil;
-import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.structures.LoggerProject;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
-import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.levelgen.GenerationStep;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 /**
@@ -43,31 +36,19 @@ public class ChunkRegenerator {
 
     private static final String CLASS_ID = "012";
 
-    // Replays terrain generation and overwrites the live chunk's block data within the given bounds.
-    public static boolean regenerateTerrain(ServerLevel level, ChunkPos pos, BoundingBox area,
-                                            List<ChunkAccess> localChunks, Map<Structure, StructureStart> structures)
+    //Rebuilds chunk over specified area to reset terrain for the next structure
+    public static boolean resetTerrain(ProtoChunk protoChunk, ServerLevel level, ChunkPos pos, BoundingBox area,
+                                       List<ChunkAccess> localChunks, boolean applyDecoration)
     {
         ChunkGenerator generator = level.getChunkSource().getGenerator();
         RandomState randomState = level.getChunkSource().randomState();
 
-        ProtoChunk protoChunk;
-        try {
-            Registry<Biome> biomeRegistry = level.registryAccess().registryOrThrow(Registries.BIOME);
-            protoChunk = new ProtoChunk(pos,  UpgradeData.EMPTY, level, biomeRegistry, null);
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "002", "Failed to create scratch chunk: " + e.getMessage());
-            return false;
-        }
         if (protoChunk == null) return false;
 
         WorldGenRegion region = new WorldGenRegion(level, localChunks, ChunkStatus.FEATURES, 0);
 
         try {
-            structures.forEach((structure, start) -> {
-            if (start.isValid()) {
-                protoChunk.setStartForStructure(structure, start);
-            }
-        });
+
             protoChunk.setStatus(ChunkStatus.STRUCTURE_STARTS);
 
             protoChunk.setStatus(ChunkStatus.STRUCTURE_REFERENCES);
@@ -94,7 +75,12 @@ public class ChunkRegenerator {
                 level.structureManager().forWorldGenRegion(region), protoChunk,
                 GenerationStep.Carving.AIR);
             protoChunk.setStatus(ChunkStatus.CARVERS);
-    } catch (Exception e) {
+
+            if(applyDecoration)
+                generator.applyBiomeDecoration(region, protoChunk, level.structureManager().forWorldGenRegion(region));
+            protoChunk.setStatus(ChunkStatus.FEATURES);
+
+        } catch (Exception e) {
         throw new RuntimeException("Terrain regeneration failed at " + pos + ": " + e.getMessage(), e);
     }
 
@@ -108,7 +94,7 @@ public class ChunkRegenerator {
     }
 
     // Convenience overload: regenerate an entire chunk with no bounding box filter.
-    public static boolean regenerateChunk(ServerLevel level, ChunkPos pos)
+    public static boolean regenerateChunk(ProtoChunk chunk, ServerLevel level, ChunkPos pos)
     {
         ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
         if(util==null) return false;
@@ -126,7 +112,18 @@ public class ChunkRegenerator {
             .map(id -> util.getManagedChunk(id).getCachedLevelChunk())
             .collect(Collectors.toList());
 
-        return regenerateTerrain(level, pos, fullChunk, chunks, Map.of());
+
+        return resetTerrain(chunk, level, pos, fullChunk, chunks, true );
+    }
+
+    public static ProtoChunk createProtoChunk(Level level, ChunkPos pos) {
+        try {
+            Registry<Biome> biomeRegistry = level.registryAccess().registryOrThrow(Registries.BIOME);
+            return new ProtoChunk(pos,  UpgradeData.EMPTY, level, biomeRegistry, null);
+        } catch (Exception e) {
+            LoggerProject.logError(CLASS_ID + "002", "Failed to create scratch chunk: " + e.getMessage());
+        }
+        return null;
     }
 
 
