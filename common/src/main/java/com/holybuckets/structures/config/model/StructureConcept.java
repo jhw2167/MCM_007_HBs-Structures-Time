@@ -46,6 +46,12 @@ public class StructureConcept {
             this.structureLoc = null;
         }
 
+        public StructureConceptStage(int stage, ResourceLocation loc) {
+            this.stage = stage;
+            this.structureId = (loc == null) ? "" : loc.toString();
+            this.structureLoc = loc;
+        }
+
         // -- Getters --
 
         public int getStage() {
@@ -167,6 +173,7 @@ public class StructureConcept {
      */
     @Nullable
     public StructureConceptStage getStage(int stageNumber) {
+        if( stageNumber < 1 ) return  new StructureConceptStage(0, "empty");
         StructureConceptStage result = stages.get(0);
         for (StructureConceptStage s : stages) {
             if (s.getStage() == stageNumber) result = s;

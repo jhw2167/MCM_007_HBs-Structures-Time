@@ -193,6 +193,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         return structureConcept.getStage(stage).is(MOD_CONFIG.loc(s));
     }
 
+    public StructureConcept getStructureConcept() {
+        return structureConcept;
+    }
+
 
     /** Static Methods **/
     public static ManagedStructureConceptChunk getInstance(LevelAccessor levelAcc, String id) {
@@ -271,7 +275,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public void triggerStructureUpgrade(int stage)
     {
         //1. Check if Chunk is available
-        if(stage < 1 || stage == this.stage) {this.stage = stage; return;}if (level == null || structureConcept == null) return;
+        if(stage < 1 || stage == this.stage) {this.stage = stage; return;}
+        if(level == null || structureConcept == null || getParent()==null) return;
         if(chunk==null) chunk = getParent().getCachedLevelChunk();
         if(!(chunk instanceof LevelChunk)) return;
 
@@ -305,6 +310,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             Structure prevStructure = MOD_CONFIG.structure(prevStructLoc);
             StructureStart prevStructureStart = chunk.getStartForStructure(prevStructure);
             BoundingBox prevBox = prevStructureStart.getBoundingBox();
+            //copy the box but apply level.getMaxBuildHeight() as maxY
+            prevBox = new BoundingBox(prevBox.minX(), prevBox.minY(), prevBox.minZ(),
+                 prevBox.maxX(), level.getMaxBuildHeight(), prevBox.maxZ());
+
             ChunkPos prevMinPos = new ChunkPos(SectionPos.blockToSectionCoord(prevBox.minX()), SectionPos.blockToSectionCoord(prevBox.minZ()));
             ChunkPos prevMaxPos = new ChunkPos(SectionPos.blockToSectionCoord(prevBox.maxX()), SectionPos.blockToSectionCoord(prevBox.maxZ()));
             ChunkPos.rangeClosed(prevMinPos, prevMaxPos).forEach(oldStructureArea::add);
@@ -313,6 +322,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         //4. Check if all chunks are available for chunk regeneration
         BoundingBox box = currentStructureStart.getBoundingBox();
+        box = new BoundingBox(box.minX(), box.minY(), box.minZ(),
+            box.maxX(), level.getMaxBuildHeight(), box.maxZ());
         ChunkPos minPos = new ChunkPos(SectionPos.blockToSectionCoord(box.minX()), SectionPos.blockToSectionCoord(box.minZ()));
         ChunkPos maxPos = new ChunkPos(SectionPos.blockToSectionCoord(box.maxX()), SectionPos.blockToSectionCoord(box.maxZ()));
         previousbox = currentBox;
@@ -335,10 +346,9 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         {
             if(chunksCompleteUpgrade.contains(newPos)) continue;
             boolean res = regenerateTerrain(newPos, false);
-            if(res) {
-                if( generateStructureInChunk(newPos) )
-                    chunksCompleteUpgrade.add(newPos);
-            }
+            if(!res) continue;
+            if( generateStructureInChunk(newPos) )
+                chunksCompleteUpgrade.add(newPos);
             return; //one chunk at a time
         }
 
@@ -369,7 +379,9 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         );
 
         List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 8);
-        boolean allLoaded = localChunks.stream().allMatch(util::isChunkFullyLoaded);
+        boolean allLoaded = localChunks.stream().allMatch( id -> {
+            return util.getManagedChunk(id).getCachedLevelChunk() instanceof LevelChunk;
+        });
         if(!allLoaded) return false;
         List<ChunkAccess> chunks = localChunks.stream()
             .map(id -> util.getManagedChunk(id).getCachedLevelChunk())
@@ -388,8 +400,17 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         long decorationSeed = random.setDecorationSeed(level.getSeed(), currentBox.minX(), currentBox.minZ());
         random.setFeatureSeed(decorationSeed, 0, currentStructure.step().ordinal());
 
-        currentStructureStart.placeInChunk(level, level.structureManager(), level.getChunkSource().getGenerator(), random,
-            currentBox, pos);
+        //define new bounding box just over the range of the specified chunk
+        BoundingBox box = new BoundingBox(
+            pos.getMinBlockX(), currentBox.minY(), pos.getMinBlockZ(),
+            pos.getMaxBlockX(), currentBox.maxY(), pos.getMaxBlockZ()
+        );
+
+        ChunkPos.rangeClosed(pos, pos).forEach(chunkPos -> {
+            currentStructureStart.placeInChunk(level, level.structureManager(), level.getChunkSource().getGenerator(), random,
+                box, pos);
+        });
+
         return true;
     }
 
@@ -434,8 +455,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         CompoundTag tag = new CompoundTag();
         tag.putString("id", this.id);
 
-        if(this.pendingUpgrade) stage--;
-        tag.putInt("stage", this.stage);
+        if(this.pendingUpgrade) {
+            tag.putInt("stage", this.stage-1);
+        } else {
+            tag.putInt("stage", this.stage);
+        }
+
 
         tag.putString("structure", structureConcept.getStructureConceptId());
 
@@ -461,7 +486,4 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         StructureConceptManager.addManagedChunk(level, this);
     }
 
-    public StructureConcept getStructureConcept() {
-        return structureConcept;
-    }
 }

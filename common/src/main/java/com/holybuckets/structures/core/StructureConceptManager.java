@@ -108,8 +108,7 @@ public class StructureConceptManager {
        String chunkId = ChunkUtil.getId(chunkPos);
        for(Structure s : structureStarts.keySet()) {
            String structureId = getStructureId(s).toString();
-           LoggerProject.logDebug(CLASS_ID + "031",
-               "Structure loaded: " + structureId + " in chunk: " + chunkId);
+           //LoggerProject.logDebug("011031", "Structure loaded: " + structureId + " in chunk: " + chunkId);
        }
     }
 
@@ -311,10 +310,8 @@ public class StructureConceptManager {
         for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
             LevelAccessor levelAccessor = entry.getKey();
             if (levelAccessor instanceof ServerLevel serverLevel) {
-                if (serverLevel.registryAccess() == ctx.registryAccess) {
-                    entry.getValue().handleTryGenerateStructure(ctx);
-                    return;
-                }
+                entry.getValue().handleTryGenerateStructure(ctx);
+                return;
             }
         }
     }

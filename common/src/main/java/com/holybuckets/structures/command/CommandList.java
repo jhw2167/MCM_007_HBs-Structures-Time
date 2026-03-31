@@ -22,6 +22,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ProtoChunk;
 
 import java.util.List;
 
@@ -162,7 +163,8 @@ public class CommandList {
             source.sendSuccess(() -> Component.literal("Regenerating chunk at " + chunkPos + "..."), true);
 
             try {
-                boolean success = ChunkRegenerator.regenerateChunk(level, chunkPos);
+                ProtoChunk chunk = ChunkRegenerator.createProtoChunk(level, chunkPos);
+                boolean success = ChunkRegenerator.regenerateChunk(chunk, level, chunkPos);
                 if (success) {
                     source.sendSuccess(() -> Component.literal("Chunk " + chunkPos + " regenerated."), true);
                     return 1;
