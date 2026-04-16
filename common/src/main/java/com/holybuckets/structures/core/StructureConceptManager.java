@@ -251,7 +251,7 @@ public class StructureConceptManager {
         //reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
         //reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::onDailyTickEvent);
         reg.registerOnServerTick(TickType.ON_120_TICKS, StructureConceptManager::onDailyTickEvent);
-        reg.registerOnServerTick(TickType.ON_20_TICKS, StructureConceptManager::onServerTick);
+        reg.registerOnServerTick(TickType.ON_SINGLE_TICK, StructureConceptManager::onServerTick);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
 
         ManagedStructureConceptChunk.registerManagedChunkData();

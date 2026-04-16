@@ -72,7 +72,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     private Set<ChunkPos> oldStructureArea = new HashSet<>(); //ChunkPos used by old area
     private List<ChunkPos> newStructureArea = new ArrayList<>(); //ChunkPos that will be utilized by new structure
-    private Set<ChunkPos> chunksCompleteUpgrade = new HashSet<>(); //ChunkPos that need to be regenerated before structure can be placed
+    private Set<ChunkPos> chunksCompletedRefresh = new HashSet<>(); //ChunkPos succesfully refreshed terrain
+    private Set<ChunkPos> chunksCompletedUpgrade = new HashSet<>(); //ChunkPos that successfully regenerated structure
 
 
 
@@ -331,7 +332,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         ChunkPos.rangeClosed(minPos, maxPos).forEach(newStructureArea::add);
 
-        chunksCompleteUpgrade.clear();
+        chunksCompletedRefresh.clear();
+        chunksCompletedUpgrade.clear();
         this.stage = stage;
         this.pendingUpgrade = true;
 
@@ -344,26 +346,32 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         //1. Process newStructureArea for placing new structure
         for(ChunkPos newPos : newStructureArea)
         {
-            if(chunksCompleteUpgrade.contains(newPos)) continue;
+            if(chunksCompletedRefresh.contains(newPos)) continue;
             boolean res = regenerateTerrain(newPos, false);
-            if(!res) continue;
-            if( generateStructureInChunk(newPos) )
-                chunksCompleteUpgrade.add(newPos);
+            if(res) chunksCompletedRefresh.add(newPos);
             return; //one chunk at a time
         }
 
         //2. Process oldStructureArea for clearing
         for(ChunkPos oldPos : oldStructureArea) {
-            if(chunksCompleteUpgrade.contains(oldPos)) continue;
+            if(chunksCompletedRefresh.contains(oldPos)) continue;
             boolean res = regenerateTerrain(oldPos, true);
-            if(res) chunksCompleteUpgrade.add(oldPos);
+            if(res) chunksCompletedRefresh.add(oldPos);
             return; //one chunk at a time
+        }
+
+        //3. Now generate the structure
+        for(ChunkPos newPos : newStructureArea) {
+         if(chunksCompletedUpgrade.contains(newPos)) continue;
+         boolean res = generateStructureInChunk(newPos);
+         if(res) chunksCompletedUpgrade.add(newPos);
         }
 
         pendingUpgrade = false;
 
     }
 
+    private static final int TERN_RANGE_ADJ_BLOCKS = 16; //expand rang by 16 on each side when apply decoration, to fill in trees and such
     private boolean regenerateTerrain(ChunkPos pos, boolean applyDecoration)
     {
         if(previousbox == null) return true; //no terrain to regenerate
@@ -373,14 +381,16 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         ProtoChunk proto = ChunkRegenerator.createProtoChunk(level, pos);
 
+        int adj = applyDecoration ? TERN_RANGE_ADJ_BLOCKS : 0;
         BoundingBox structureRange = new BoundingBox(
-            pos.getMinBlockX(), previousbox.minY(), pos.getMinBlockZ(),
-            pos.getMaxBlockX(), previousbox.maxY(), pos.getMaxBlockZ()
+            pos.getMinBlockX() - adj, previousbox.minY(), pos.getMinBlockZ() - adj,
+            pos.getMaxBlockX() + adj, previousbox.maxY(), pos.getMaxBlockZ() + adj
         );
 
         List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 8);
         boolean allLoaded = localChunks.stream().allMatch( id -> {
-            return util.getManagedChunk(id).getCachedLevelChunk() instanceof LevelChunk;
+            return  util.isLoaded(id) && util.isChunkFullyLoaded(id) &&
+                util.getManagedChunk(id).getCachedLevelChunk() instanceof LevelChunk;
         });
         if(!allLoaded) return false;
         List<ChunkAccess> chunks = localChunks.stream()

@@ -81,6 +81,8 @@ public class ChunkRegenerator {
             protoChunk.setStatus(ChunkStatus.FEATURES);
 
         } catch (Exception e) {
+        e.getMessage();
+        e.printStackTrace();
         throw new RuntimeException("Terrain regeneration failed at " + pos + ": " + e.getMessage(), e);
     }
 

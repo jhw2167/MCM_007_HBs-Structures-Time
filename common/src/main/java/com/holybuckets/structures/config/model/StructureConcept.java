@@ -173,8 +173,8 @@ public class StructureConcept {
      */
     @Nullable
     public StructureConceptStage getStage(int stageNumber) {
-        if( stageNumber < 1 ) return  new StructureConceptStage(0, "empty");
-        StructureConceptStage result = stages.get(0);
+        if( stageNumber < 0 ) return  new StructureConceptStage(-1, "empty");
+        StructureConceptStage result = new StructureConceptStage(stageNumber, "skip");
         for (StructureConceptStage s : stages) {
             if (s.getStage() == stageNumber) result = s;
         }
