@@ -1,6 +1,11 @@
 Overview
 ---
 
+Great seed: 1909820652802578134
+nova:tavern_oak at spawn
+
+Summarize and suggest problem solutions in chat in pseudo code or real code format. Do not make any edits to code unless explicitly instructed.
+
 Keep Notes:
 ---
 
@@ -290,3 +295,38 @@ Structure Sets
 - nova_structures:wild_ruin
 - nova_structures:witch_villa
 - minecraft:woodland_mansions
+
+
+Consider the ChunkRegenerator class which regenerates a protoChunk to copy the original state of a chunk back into the real overworld. This class currently
+fails to copy over decoration elements like trees, flowers, and grass. Please try and detect the issue. The below method summarizes the calling context, applyDecoration is always set to true
+
+Consider method:
+
+  private boolean regenerateTerrain(ChunkPos pos, boolean applyDecoration)
+    {
+        if(previousbox == null) return true; //no terrain to regenerate
+        ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
+        if(util==null) return false;
+        if(!util.isChunkFullyLoaded(pos)) return false;
+
+        ProtoChunk proto = ChunkRegenerator.createProtoChunk(level, pos);
+
+        int adj = applyDecoration ? TERN_RANGE_ADJ_BLOCKS : 0;
+        BoundingBox structureRange = new BoundingBox(
+            pos.getMinBlockX() - adj, previousbox.minY(), pos.getMinBlockZ() - adj,
+            pos.getMaxBlockX() + adj, previousbox.maxY(), pos.getMaxBlockZ() + adj
+        );
+
+        List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 8);
+        boolean allLoaded = localChunks.stream().allMatch( id -> {
+            return  util.isLoaded(id) && util.isChunkFullyLoaded(id) &&
+                util.getManagedChunk(id).getCachedLevelChunk() instanceof LevelChunk;
+        });
+        if(!allLoaded) return false;
+        List<ChunkAccess> chunks = localChunks.stream()
+            .map(id -> util.getManagedChunk(id).getCachedLevelChunk())
+            .collect(Collectors.toList());
+
+        return ChunkRegenerator.resetTerrain(proto, level, pos, structureRange, chunks, applyDecoration);
+    }
+

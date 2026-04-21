@@ -360,12 +360,19 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             return; //one chunk at a time
         }
 
+        for(ChunkPos oldPos : oldStructureArea) {
+            this.applyDecoration(oldPos);
+        }
+
         //3. Now generate the structure
         for(ChunkPos newPos : newStructureArea) {
          if(chunksCompletedUpgrade.contains(newPos)) continue;
          boolean res = generateStructureInChunk(newPos);
          if(res) chunksCompletedUpgrade.add(newPos);
         }
+
+        chunksCompletedRefresh.addAll(oldStructureArea);
+        ChunkRegenerator.clearCache(chunksCompletedRefresh);
 
         pendingUpgrade = false;
 
@@ -397,7 +404,24 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             .map(id -> util.getManagedChunk(id).getCachedLevelChunk())
             .collect(Collectors.toList());
 
-        return ChunkRegenerator.resetTerrain(proto, level, pos, structureRange, chunks, applyDecoration);
+        boolean res = ChunkRegenerator.resetTerrain(proto, level, pos, structureRange, chunks, applyDecoration);
+
+        if(res && applyDecoration) {
+            //ChunkRegenerator.applyDecoration(level, pos, chunks);
+            return true;
+        }
+        return res;
+    }
+
+    private void applyDecoration(ChunkPos pos)
+    {
+        int adj = 2;
+        BoundingBox structureRange = new BoundingBox(
+            pos.getMinBlockX() - adj, previousbox.minY(), pos.getMinBlockZ() - adj,
+            pos.getMaxBlockX() + adj, previousbox.maxY(), pos.getMaxBlockZ() + adj
+        );
+
+        ChunkRegenerator.applyDecorationAndCopy(level, pos, structureRange);
     }
 
     private boolean generateStructureInChunk(ChunkPos pos)

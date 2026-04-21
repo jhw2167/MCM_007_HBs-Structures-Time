@@ -1,6 +1,7 @@
 package com.holybuckets.structures.core;
 
 import com.holybuckets.foundation.HBUtil;
+import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.structures.LoggerProject;
 import net.minecraft.core.Registry;
@@ -18,12 +19,13 @@ import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraft.world.level.levelgen.structure.StructureStart;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -76,9 +78,16 @@ public class ChunkRegenerator {
                 GenerationStep.Carving.AIR);
             protoChunk.setStatus(ChunkStatus.CARVERS);
 
-            if(applyDecoration)
+            /*
+            if(applyDecoration) {
+                List<ChunkAccess> genChunks = new ArrayList<>(localChunks.size());
+                localChunks.forEach(c -> genChunks.add(createProtoChunk(level, c.getPos())));
+                region = new WorldGenRegion(level, genChunks, ChunkStatus.FEATURES, 1);
                 generator.applyBiomeDecoration(region, protoChunk, level.structureManager().forWorldGenRegion(region));
+            }
             protoChunk.setStatus(ChunkStatus.FEATURES);
+             */
+
 
         } catch (Exception e) {
         e.getMessage();
@@ -86,13 +95,38 @@ public class ChunkRegenerator {
         throw new RuntimeException("Terrain regeneration failed at " + pos + ": " + e.getMessage(), e);
     }
 
-        LevelChunk live = level.getChunk(pos.x, pos.z);
-        copySections(protoChunk, live, area);
-        live.setUnsaved(true);
-        notifyClients(level, live, area);
 
         LoggerProject.logDebug(CLASS_ID + "010", "Regenerated terrain for chunk " + pos);
         return true;
+    }
+
+    /**
+     * Applies biome decoration (trees, flowers, grass, ores) directly to live chunks.
+     */
+    static final int writeRadius = 1;
+    public static void applyDecorationAndCopy(ServerLevel level, ChunkPos pos, BoundingBox area)
+    {
+        if(!CHUNK_CACHE.containsKey(pos)) return;
+        ChunkGenerator generator = level.getChunkSource().getGenerator();
+        List<ChunkPos> localChunkPos = HBUtil.ChunkUtil.getLocalChunkPos(pos, writeRadius);
+        //test if all pos are in chunk_cache
+        if(!localChunkPos.stream().allMatch(CHUNK_CACHE::containsKey)) {
+            return;
+        }
+        List<ChunkAccess> localChunks = localChunkPos.stream().map(CHUNK_CACHE::get).collect(Collectors.toList());
+        WorldGenRegion region = new WorldGenRegion(level, localChunks, ChunkStatus.FEATURES, writeRadius);
+
+        ProtoChunk centerChunk = CHUNK_CACHE.get(pos);
+        generator.applyBiomeDecoration( region, centerChunk,
+            level.structureManager().forWorldGenRegion(region)
+        );
+
+        // Mark affected chunks dirty so they get saved
+        LevelChunk live = level.getChunk(pos.x, pos.z);
+        copySections(centerChunk, live, area);
+        live.setUnsaved(true);
+        notifyClients(level, live, area);
+
     }
 
     // Convenience overload: regenerate an entire chunk with no bounding box filter.
@@ -118,14 +152,22 @@ public class ChunkRegenerator {
         return resetTerrain(chunk, level, pos, fullChunk, chunks, true );
     }
 
+    private static Map<ChunkPos, ProtoChunk> CHUNK_CACHE = new ConcurrentHashMap<>();
     public static ProtoChunk createProtoChunk(Level level, ChunkPos pos) {
+
+        if(CHUNK_CACHE.containsKey(pos)) return CHUNK_CACHE.get(pos);
         try {
             Registry<Biome> biomeRegistry = level.registryAccess().registryOrThrow(Registries.BIOME);
-            return new ProtoChunk(pos,  UpgradeData.EMPTY, level, biomeRegistry, null);
+            ProtoChunk pc = new ProtoChunk(pos,  UpgradeData.EMPTY, level, biomeRegistry, null);
+            CHUNK_CACHE.put(pos, pc);
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "002", "Failed to create scratch chunk: " + e.getMessage());
         }
         return null;
+    }
+
+    public static void clearCache(Set<ChunkPos> toClear) {
+        CHUNK_CACHE.keySet().removeAll(toClear);
     }
 
 
