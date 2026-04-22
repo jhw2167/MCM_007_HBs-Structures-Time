@@ -1,7 +1,6 @@
 package com.holybuckets.structures.core;
 
 import com.holybuckets.foundation.HBUtil;
-import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.structures.LoggerProject;
 import net.minecraft.core.Registry;
@@ -19,6 +18,8 @@ import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,8 +40,7 @@ public class ChunkRegenerator {
     private static final String CLASS_ID = "012";
 
     //Rebuilds chunk over specified area to reset terrain for the next structure
-    public static boolean resetTerrain(ProtoChunk protoChunk, ServerLevel level, ChunkPos pos, BoundingBox area,
-                                       List<ChunkAccess> localChunks, boolean applyDecoration)
+    public static boolean resetTerrain(ProtoChunk protoChunk, ServerLevel level, ChunkPos pos, List<ChunkAccess> localChunks)
     {
         ChunkGenerator generator = level.getChunkSource().getGenerator();
         RandomState randomState = level.getChunkSource().randomState();
@@ -96,38 +96,38 @@ public class ChunkRegenerator {
     }
 
 
-        LoggerProject.logDebug(CLASS_ID + "010", "Regenerated terrain for chunk " + pos);
+        LoggerProject.logDebug("012010", "Regenerated terrain for chunk " + pos);
         return true;
     }
 
     /**
      * Applies biome decoration (trees, flowers, grass, ores) directly to live chunks.
      */
-    static final int writeRadius = 1;
-    public static void applyDecorationAndCopy(ServerLevel level, ChunkPos pos, BoundingBox area)
+    static final int writeRadius = 8;
+    public static void applyDecorationBatch(ServerLevel level, List<ChunkPos> chunksToDecorate,
+                                            Map<Structure, StructureStart> starts)
     {
-        if(!CHUNK_CACHE.containsKey(pos)) return;
+        if (chunksToDecorate.isEmpty() || CHUNK_CACHE.isEmpty()) return;
         ChunkGenerator generator = level.getChunkSource().getGenerator();
-        List<ChunkPos> localChunkPos = HBUtil.ChunkUtil.getLocalChunkPos(pos, writeRadius);
-        //test if all pos are in chunk_cache
-        if(!localChunkPos.stream().allMatch(CHUNK_CACHE::containsKey)) {
-            return;
+        List<ChunkAccess> regionChunks = new ArrayList<>(CHUNK_CACHE.values());
+        WorldGenRegion region = new WorldGenRegion(level, regionChunks, ChunkStatus.FEATURES, writeRadius);
+
+        for (ProtoChunk proto : CHUNK_CACHE.values()) {
+            proto.setAllStarts(starts);
+            starts.forEach((s, start) ->
+                proto.addReferenceForStructure(s, start.getChunkPos().toLong()));
         }
-        List<ChunkAccess> localChunks = localChunkPos.stream().map(CHUNK_CACHE::get).collect(Collectors.toList());
-        WorldGenRegion region = new WorldGenRegion(level, localChunks, ChunkStatus.FEATURES, writeRadius);
 
-        ProtoChunk centerChunk = CHUNK_CACHE.get(pos);
-        generator.applyBiomeDecoration( region, centerChunk,
-            level.structureManager().forWorldGenRegion(region)
-        );
+        for (ChunkPos cp : chunksToDecorate) {
+            ProtoChunk centerChunk = CHUNK_CACHE.get(cp);
+            if (centerChunk == null) continue;
 
-        // Mark affected chunks dirty so they get saved
-        LevelChunk live = level.getChunk(pos.x, pos.z);
-        copySections(centerChunk, live, area);
-        live.setUnsaved(true);
-        notifyClients(level, live, area);
-
+            generator.applyBiomeDecoration(region, centerChunk,
+                level.structureManager().forWorldGenRegion(region));
+            centerChunk.setStatus(ChunkStatus.FEATURES);
+        }
     }
+
 
     // Convenience overload: regenerate an entire chunk with no bounding box filter.
     public static boolean regenerateChunk(ProtoChunk chunk, ServerLevel level, ChunkPos pos)
@@ -170,6 +170,16 @@ public class ChunkRegenerator {
         CHUNK_CACHE.keySet().removeAll(toClear);
     }
 
+    public static void copyChunk(ServerLevel level, ChunkPos pos, BoundingBox area)
+    {
+        ProtoChunk proto = CHUNK_CACHE.get(pos);
+        if (proto == null) return;
+
+        LevelChunk live = level.getChunk(pos.x, pos.z);
+        copySections(proto, live, area);
+        live.setUnsaved(true);
+        notifyClients(level, live, area);
+    }
 
     // Copies block state data from the scratch ProtoChunk into the live LevelChunk, bounded by region.
     private static void copySections(ProtoChunk source, LevelChunk target, BoundingBox region)
@@ -187,6 +197,7 @@ public class ChunkRegenerator {
             LevelChunkSection sourceSection = source.getSection(index);
             LevelChunkSection targetSection = target.getSection(index);
 
+            if(sourceSection.hasOnlyAir() && targetSection.hasOnlyAir()) continue;
             copyBlockStates(sourceSection, targetSection, target.getPos(), sectionY, region);
         }
     }

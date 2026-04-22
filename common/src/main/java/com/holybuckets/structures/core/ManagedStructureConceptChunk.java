@@ -343,56 +343,48 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     {
         if(!pendingUpgrade) return;
 
-        //1. Process newStructureArea for placing new structure
-        for(ChunkPos newPos : newStructureArea)
-        {
-            if(chunksCompletedRefresh.contains(newPos)) continue;
-            boolean res = regenerateTerrain(newPos, false);
-            if(res) chunksCompletedRefresh.add(newPos);
-            return; //one chunk at a time
+        // Phase 1: Regenerate base terrain for all affected chunks
+        Set<ChunkPos> allAffectedChunks = new LinkedHashSet<>();
+        allAffectedChunks.addAll(oldStructureArea);
+        allAffectedChunks.addAll(newStructureArea);
+
+        for (ChunkPos cp : allAffectedChunks) {
+            if (chunksCompletedRefresh.contains(cp)) continue;
+            boolean res = regenerateTerrain(cp);
+            if (res) chunksCompletedRefresh.add(cp);
+            return; // one chunk at a time
         }
 
-        //2. Process oldStructureArea for clearing
-        for(ChunkPos oldPos : oldStructureArea) {
-            if(chunksCompletedRefresh.contains(oldPos)) continue;
-            boolean res = regenerateTerrain(oldPos, true);
-            if(res) chunksCompletedRefresh.add(oldPos);
-            return; //one chunk at a time
+        // Phase 2: Decorate + structure placement via applyBiomeDecoration
+        applyDecoration(chunksCompletedRefresh.stream().toList());
+
+        //3. Copy Data
+        for(ChunkPos cp : chunksCompletedRefresh) {
+            if (chunksCompletedUpgrade.contains(cp)) continue;
+            int yMin = currentBox.minY();
+            if(previousbox != null && oldStructureArea.contains(cp)) {
+                yMin = Math.min(currentBox.minY(), previousbox.minY());
+            }
+            BoundingBox structureRange = new BoundingBox(
+                cp.getMinBlockX(), yMin, cp.getMinBlockZ(),
+                cp.getMaxBlockX(), currentBox.maxY(), cp.getMaxBlockZ()
+            );
+            ChunkRegenerator.copyChunk(level, cp, structureRange);
         }
 
-        for(ChunkPos oldPos : oldStructureArea) {
-            this.applyDecoration(oldPos);
-        }
-
-        //3. Now generate the structure
-        for(ChunkPos newPos : newStructureArea) {
-         if(chunksCompletedUpgrade.contains(newPos)) continue;
-         boolean res = generateStructureInChunk(newPos);
-         if(res) chunksCompletedUpgrade.add(newPos);
-        }
-
-        chunksCompletedRefresh.addAll(oldStructureArea);
-        ChunkRegenerator.clearCache(chunksCompletedRefresh);
-
+        ChunkRegenerator.clearCache(allAffectedChunks);
         pendingUpgrade = false;
-
     }
 
     private static final int TERN_RANGE_ADJ_BLOCKS = 16; //expand rang by 16 on each side when apply decoration, to fill in trees and such
-    private boolean regenerateTerrain(ChunkPos pos, boolean applyDecoration)
+    private boolean regenerateTerrain(ChunkPos pos)
     {
-        if(previousbox == null) return true; //no terrain to regenerate
         ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
         if(util==null) return false;
         if(!util.isChunkFullyLoaded(pos)) return false;
 
         ProtoChunk proto = ChunkRegenerator.createProtoChunk(level, pos);
 
-        int adj = applyDecoration ? TERN_RANGE_ADJ_BLOCKS : 0;
-        BoundingBox structureRange = new BoundingBox(
-            pos.getMinBlockX() - adj, previousbox.minY(), pos.getMinBlockZ() - adj,
-            pos.getMaxBlockX() + adj, previousbox.maxY(), pos.getMaxBlockZ() + adj
-        );
 
         List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 8);
         boolean allLoaded = localChunks.stream().allMatch( id -> {
@@ -404,24 +396,19 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             .map(id -> util.getManagedChunk(id).getCachedLevelChunk())
             .collect(Collectors.toList());
 
-        boolean res = ChunkRegenerator.resetTerrain(proto, level, pos, structureRange, chunks, applyDecoration);
+        boolean res = ChunkRegenerator.resetTerrain(proto, level, pos, chunks);
 
-        if(res && applyDecoration) {
-            //ChunkRegenerator.applyDecoration(level, pos, chunks);
-            return true;
-        }
         return res;
     }
 
-    private void applyDecoration(ChunkPos pos)
+    private void applyDecoration(List<ChunkPos> allAffectedChunks)
     {
-        int adj = 2;
-        BoundingBox structureRange = new BoundingBox(
-            pos.getMinBlockX() - adj, previousbox.minY(), pos.getMinBlockZ() - adj,
-            pos.getMaxBlockX() + adj, previousbox.maxY(), pos.getMaxBlockZ() + adj
-        );
+        // Phase 2: Decorate all affected chunks in one batch
+        List<ChunkPos> allAffected = new ArrayList<>(allAffectedChunks);
+        ChunkRegenerator.applyDecorationBatch(level, allAffected, structureStarts);
 
-        ChunkRegenerator.applyDecorationAndCopy(level, pos, structureRange);
+
+        //ChunkRegenerator.applyDecorationAndCopy(level, pos, structureRange, structureStarts);
     }
 
     private boolean generateStructureInChunk(ChunkPos pos)
