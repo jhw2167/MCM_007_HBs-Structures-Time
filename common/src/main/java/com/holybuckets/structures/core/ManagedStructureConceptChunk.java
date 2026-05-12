@@ -72,10 +72,11 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private BoundingBox currentBox;
     private BoundingBox previousbox;
 
-    private Set<ChunkPos> oldStructureArea = new HashSet<>(); //ChunkPos used by old area
-    private List<ChunkPos> newStructureArea = new ArrayList<>(); //ChunkPos that will be utilized by new structure
-    private Set<ChunkPos> chunksCompletedRefresh = new HashSet<>(); //ChunkPos succesfully refreshed terrain
-    private Set<ChunkPos> chunksCompletedUpgrade = new HashSet<>(); //ChunkPos that successfully regenerated structure
+    private Set<ChunkPos> oldStructureArea; //ChunkPos used by old area
+    private List<ChunkPos> newStructureArea; //ChunkPos that will be utilized by new structure
+    private List<ChunkPos> affectedUpgradeChunks; //all chunks to be refreshed in the next upgrade
+    private Set<ChunkPos> chunksCompletedRefresh; //ChunkPos succesfully refreshed terrain
+    private Set<ChunkPos> chunksCompletedUpgrade; //ChunkPos that successfully regenerated structure
 
 
 
@@ -88,6 +89,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.structureStarts = new HashMap<>();
         this.oldStructureArea = new HashSet<>();
         this.newStructureArea = new ArrayList<>();
+
+        this.affectedUpgradeChunks = new ArrayList<>();
+        this.chunksCompletedRefresh = new HashSet<>();
+        this.chunksCompletedUpgrade = new HashSet<>();
+
+        this.structureBoxes = new HashMap<>();
     }
 
     public ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp, StructureSetStartContext ctx, int stage) {
@@ -273,8 +280,17 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             structureStarts.put(mcStructure, start);
         }
 
+        if(structureStarts.isEmpty()) return;
+        this.structureConcept.getStages().forEach(stage -> {
+            Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
+            StructureStart start = structureStarts.get(s);
+            BoundingBox bb = start.getBoundingBox();
+            structureBoxes.put(stage.getStructureLoc(), bb);
+        });
+
         setInstance(level, id, this);
     }
+
 
     /**
      * Places the structure for the given stage using the stored StructureStart context.
@@ -308,10 +324,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         //Empty structures are processed to clear the land as well
         currentStructure = MOD_CONFIG.structure(conceptStage.getStructureLoc());
-        currentStructureStart = chunk.getStartForStructure(currentStructure);
-        if(currentStructureStart == null || !currentStructureStart.isValid()) {
-            generateAllStructureStarts(null);
-        }
+
 
         //3. Obtain all old chunksPos for clearing
         ResourceLocation prevStructLoc = structureConcept.getStage(this.stage).getStructureLoc();
@@ -336,7 +349,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         BoundingBox box  = previousbox;
         {
-            BoundingBox structBox = currentStructureStart.getBoundingBox();
+            BoundingBox structBox = structureBoxes.get(conceptStage.getStructureLoc());
             if(box==null)
                 box = structBox;
             else
@@ -351,6 +364,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         currentBox = box;
 
         ChunkPos.rangeClosed(minPos, maxPos).forEach(newStructureArea::add);
+        affectedUpgradeChunks.addAll(oldStructureArea);
+        affectedUpgradeChunks.addAll(newStructureArea);
 
         chunksCompletedRefresh.clear();
         chunksCompletedUpgrade.clear();
@@ -360,42 +375,75 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     }
 
     //here
-    private void handleStructureUpgradeOnTick()
-    {
-        if(!pendingUpgrade) return;
+    enum UpgradePhase { TERRAIN, DECORATE, COPY, DONE }
 
-        // Phase 1: Regenerate base terrain for all affected chunks
-        Set<ChunkPos> allAffectedChunks = new LinkedHashSet<>();
-        allAffectedChunks.addAll(oldStructureArea);
-        allAffectedChunks.addAll(newStructureArea);
+    private UpgradePhase phase = UpgradePhase.TERRAIN;
+    private int chunkIndex = 0;
 
-        for (ChunkPos cp : allAffectedChunks) {
-            if (chunksCompletedRefresh.contains(cp)) continue;
-            boolean res = regenerateTerrain(cp);
-            if (res) chunksCompletedRefresh.add(cp);
-            return; // one chunk at a time
+    private void handleStructureUpgradeOnTick() {
+        if (!pendingUpgrade) return;
+
+        switch (phase) {
+            case TERRAIN:
+                if (chunkIndex >= affectedUpgradeChunks.size()) {
+                    phase = UpgradePhase.DECORATE;
+                    chunkIndex = 0;
+                    break;
+                }
+                ChunkPos cp = affectedUpgradeChunks.get(chunkIndex);
+                if (regenerateTerrain(cp)) chunkIndex++;
+                // else retry next tick (chunk not loaded)
+                break;
+
+            case DECORATE:
+                // One batch call — only touches proto chunks in RAM
+                var starts = new HashMap();
+                starts.put(currentStructure, structureStarts.get(currentStructure) );
+                boolean success = ChunkRegenerator.applyDecorationBatch(
+                    level, affectedUpgradeChunks, starts );
+                if (success) {
+                    phase = UpgradePhase.COPY;
+                    chunkIndex = 0;
+                }
+                // else retry next tick (chunks not loaded)
+                break;
+
+            case COPY:
+                if (chunkIndex >= affectedUpgradeChunks.size()) {
+                    phase = UpgradePhase.DONE;
+                    break;
+                }
+                ChunkPos copyPos = affectedUpgradeChunks.get(chunkIndex);
+                BoundingBox area = getAreaForChunk(copyPos); // full chunk or structure box
+                ChunkRegenerator.copyChunk(level, copyPos, area);
+                chunkIndex++;
+                break;
+
+            case DONE:
+                ChunkRegenerator.clearCache(new HashSet<>(affectedUpgradeChunks));
+                pendingUpgrade = false;
+                phase = UpgradePhase.TERRAIN;
+                chunkIndex = 0;
+                break;
         }
-
-        // Phase 2: Decorate + structure placement via applyBiomeDecoration
-        applyDecoration(chunksCompletedRefresh.stream().toList());
-
-        //3. Copy Data
-        for(ChunkPos cp : chunksCompletedRefresh) {
-            if (chunksCompletedUpgrade.contains(cp)) continue;
-            int yMin = currentBox.minY();
-            if(previousbox != null && oldStructureArea.contains(cp)) {
-                yMin = Math.min(currentBox.minY(), previousbox.minY());
-            }
-            BoundingBox structureRange = new BoundingBox(
-                cp.getMinBlockX(), yMin, cp.getMinBlockZ(),
-                cp.getMaxBlockX(), currentBox.maxY(), cp.getMaxBlockZ()
-            );
-            ChunkRegenerator.copyChunk(level, cp, structureRange);
-        }
-
-        ChunkRegenerator.clearCache(allAffectedChunks);
-        pendingUpgrade = false;
     }
+
+    private BoundingBox getAreaForChunk(ChunkPos cp) {
+        int minY = currentBox.minY();
+        int maxY = currentBox.maxY();
+        if(previousbox != null) {
+            minY = previousbox.minY();
+            maxY = previousbox.maxY();
+        }
+
+        return  new BoundingBox(
+            cp.getMinBlockX(), minY, cp.getMinBlockZ(),
+            cp.getMaxBlockX(), maxY, cp.getMaxBlockZ()
+        );
+
+    }
+
+    //needs memory leak help with cache
 
     private static final int TERN_RANGE_ADJ_BLOCKS = 16; //expand rang by 16 on each side when apply decoration, to fill in trees and such
     private boolean regenerateTerrain(ChunkPos pos)
@@ -433,46 +481,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         //ChunkRegenerator.applyDecorationAndCopy(level, pos, structureRange, structureStarts);
     }
 
-    private boolean generateStructureInChunk(ChunkPos pos)
-    {
-        if(currentStructureStart == null) return false;
-        if(chunk==null) chunk = getParent().getCachedLevelChunk();
-        if(!(chunk instanceof LevelChunk)) return false;
-
-        WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));
-        long decorationSeed = random.setDecorationSeed(level.getSeed(), currentBox.minX(), currentBox.minZ());
-        random.setFeatureSeed(decorationSeed, 0, currentStructure.step().ordinal());
-
-        //define new bounding box just over the range of the specified chunk
-        BoundingBox box = new BoundingBox(
-            pos.getMinBlockX(), currentBox.minY(), pos.getMinBlockZ(),
-            pos.getMaxBlockX(), currentBox.maxY(), pos.getMaxBlockZ()
-        );
-
-        ChunkPos.rangeClosed(pos, pos).forEach(chunkPos -> {
-            currentStructureStart.placeInChunk(level, level.structureManager(), level.getChunkSource().getGenerator(), random,
-                box, pos);
-        });
-
-        return true;
-    }
-
-    /*
-
-        ChunkRegenerator.regenerateChunk(level, pos);
-
-        WorldgenRandom random = new WorldgenRandom(new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));
-        long decorationSeed = random.setDecorationSeed(level.getSeed(), box.minX(), box.minZ());
-        random.setFeatureSeed(decorationSeed, 0, structure.step().ordinal());
-
-        // Pass level directly so setBlock routes through ServerLevel → client notifications are sent
-        ChunkPos.rangeClosed(minPos, maxPos).forEach(chunkPos -> {
-            structureStart.placeInChunk(level, level.structureManager(), level.getChunkSource().getGenerator(), random,
-                new BoundingBox(chunkPos.getMinBlockX(), level.getMinBuildHeight(), chunkPos.getMinBlockZ(), chunkPos.getMaxBlockX(), level.getMaxBuildHeight(), chunkPos.getMaxBlockZ()), chunkPos);
-        });
-
-     */
-
 
     //Applies decoration step to the protochunk which also regenerates the structure -- need to hold onto the protochunk to use this
     private void applyChunkRedecoration(StructureStart structureStart) {
@@ -507,22 +515,13 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         // Serialize structure bounding boxes
         CompoundTag boxesTag = new CompoundTag();
-        if (structureBoxes == null && structureStarts != null)
-        {
-            this.structureConcept.getStages().forEach(stage -> {
-                Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
-                StructureStart start = structureStarts.get(s);
-                BoundingBox bb = start.getBoundingBox();
-                structureBoxes.put(stage.getStructureLoc(), bb);
-            });
-        }
-        if (structureBoxes != null )
+        if (structureStarts != null && !structureStarts.isEmpty() )
         {
             this.structureConcept.getStages().forEach(stage -> {
                 BoundingBox bb = structureBoxes.get(stage.getStructureLoc());
                 String boxStr = bb.minX() + "," + bb.minY() + "," + bb.minZ() + ","
                     + bb.maxX() + "," + bb.maxY() + "," + bb.maxZ();
-                boxesTag.putString(stage.getStructureId(), boxStr);
+                boxesTag.putString(stage.getStage()+"", boxStr);
             });
         }
         tag.put("structureBoxes", boxesTag);
@@ -551,6 +550,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             this.structureBoxes = new HashMap<>();
             CompoundTag boxesTag = tag.getCompound("structureBoxes");
             for (String key : boxesTag.getAllKeys()) {
+                int stageNo = Integer.parseInt(key);
                 String boxStr = boxesTag.getString(key);
                 String[] parts = boxStr.split(",");
                 if (parts.length == 6) {
@@ -560,7 +560,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                             Integer.parseInt(parts[2]), Integer.parseInt(parts[3]),
                             Integer.parseInt(parts[4]), Integer.parseInt(parts[5])
                         );
-                        this.structureBoxes.put(new ResourceLocation(key), bb);
+                        ResourceLocation structLoc = structureConcept.getStage(stageNo).getStructureLoc();
+                        this.structureBoxes.put(structLoc, bb);
                     } catch (NumberFormatException e) {
                         LoggerProject.logError(CLASS_ID + "003",
                             "Failed to parse bounding box for " + key + ": " + boxStr);
