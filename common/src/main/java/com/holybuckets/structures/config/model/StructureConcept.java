@@ -150,7 +150,11 @@ public class StructureConcept {
 
     /** Returns an unmodifiable view of this concept's stages, in definition order. */
     public List<StructureConceptStage> getStages() {
-        return Collections.unmodifiableList(stages);
+        return stages.stream().toList();
+    }
+
+    public List<StructureConceptStage> getStagesNoSkips() {
+        return stages.stream().filter(s -> !s.isSkip()).toList();
     }
 
     /** Returns the number of stages defined for this concept. */

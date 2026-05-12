@@ -7,6 +7,7 @@ import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.foundation.modelInterface.IMangedChunkData;
+import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
 import com.holybuckets.structures.mixin.ChunkAccessAccessor;
@@ -65,6 +66,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private LevelChunk chunk;
     private ProtoChunk protoChunk;
     private Map<Structure, StructureStart> structureStarts;
+    private Map<ResourceLocation, BoundingBox> structureBoxes;
     private Structure currentStructure;
     private StructureStart currentStructureStart;
     private BoundingBox currentBox;
@@ -489,23 +491,42 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
 
     /** Serialization **/
-
     @Override
     public CompoundTag serializeNBT() {
-        if(this==DEFAULT || structureConcept==null) return new CompoundTag();
+        if (this == DEFAULT || structureConcept == null) return new CompoundTag();
         CompoundTag tag = new CompoundTag();
         tag.putString("id", this.id);
 
-        if(this.pendingUpgrade) {
-            tag.putInt("stage", this.stage-1);
+        if (this.pendingUpgrade) {
+            tag.putInt("stage", this.stage - 1);
         } else {
             tag.putInt("stage", this.stage);
         }
 
-
         tag.putString("structure", structureConcept.getStructureConceptId());
 
-        //LoggerProject.logDebug(CLASS_ID + "001", "Serializing ManagedTimedStructureChunk: " + tag);
+        // Serialize structure bounding boxes
+        CompoundTag boxesTag = new CompoundTag();
+        if (structureBoxes == null && structureStarts != null)
+        {
+            this.structureConcept.getStages().forEach(stage -> {
+                Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
+                StructureStart start = structureStarts.get(s);
+                BoundingBox bb = start.getBoundingBox();
+                structureBoxes.put(stage.getStructureLoc(), bb);
+            });
+        }
+        if (structureBoxes != null )
+        {
+            this.structureConcept.getStages().forEach(stage -> {
+                BoundingBox bb = structureBoxes.get(stage.getStructureLoc());
+                String boxStr = bb.minX() + "," + bb.minY() + "," + bb.minZ() + ","
+                    + bb.maxX() + "," + bb.maxY() + "," + bb.maxZ();
+                boxesTag.putString(stage.getStructureId(), boxStr);
+            });
+        }
+        tag.put("structureBoxes", boxesTag);
+
         return tag;
     }
 
@@ -524,7 +545,44 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if (conceptId != null && !conceptId.isEmpty()) {
             this.structureConcept = MOD_CONFIG.getStructureConcept(conceptId);
         }
+
+        // Deserialize structure bounding boxes
+        if (tag.contains("structureBoxes")) {
+            this.structureBoxes = new HashMap<>();
+            CompoundTag boxesTag = tag.getCompound("structureBoxes");
+            for (String key : boxesTag.getAllKeys()) {
+                String boxStr = boxesTag.getString(key);
+                String[] parts = boxStr.split(",");
+                if (parts.length == 6) {
+                    try {
+                        BoundingBox bb = new BoundingBox(
+                            Integer.parseInt(parts[0]), Integer.parseInt(parts[1]),
+                            Integer.parseInt(parts[2]), Integer.parseInt(parts[3]),
+                            Integer.parseInt(parts[4]), Integer.parseInt(parts[5])
+                        );
+                        this.structureBoxes.put(new ResourceLocation(key), bb);
+                    } catch (NumberFormatException e) {
+                        LoggerProject.logError(CLASS_ID + "003",
+                            "Failed to parse bounding box for " + key + ": " + boxStr);
+                    }
+                }
+            }
+        }
+
+
         StructureConceptManager.addManagedChunk(level, this);
     }
 
 }
+
+/**
+ * Convert structure starts to bounding boxes and save those
+ *
+ *
+ *
+ * Redo handleStructurePertick alg to work in quadrants
+ *
+ *
+ *
+ * Test and wire up clientLevel updates
+ */
