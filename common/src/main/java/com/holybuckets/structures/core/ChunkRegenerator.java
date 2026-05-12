@@ -1,11 +1,14 @@
 package com.holybuckets.structures.core;
 
 import com.holybuckets.foundation.HBUtil;
+import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.structures.LoggerProject;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
@@ -21,10 +24,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -101,23 +101,61 @@ public class ChunkRegenerator {
     }
 
     /**
-     * Applies biome decoration (trees, flowers, grass, ores) directly to live chunks.
+     * Applies biome decoration (trees, flowers, grass, ores) to cached ProtoChunks.
+     * Builds a contiguous square WorldGenRegion from CHUNK_CACHE, filling gaps with
+     * live LevelChunks so the region grid is valid for WorldGenRegion's index math.
+     * Returns false if any chunk in the grid is not fully loaded.
      */
-    static final int writeRadius = 8;
-    public static void applyDecorationBatch(ServerLevel level, List<ChunkPos> chunksToDecorate,
+    public static boolean applyDecorationBatch(ServerLevel level, List<ChunkPos> chunksToDecorate,
                                             Map<Structure, StructureStart> starts)
     {
-        if (chunksToDecorate.isEmpty() || CHUNK_CACHE.isEmpty()) return;
+    try {
+        if (chunksToDecorate.isEmpty() || CHUNK_CACHE.isEmpty()) return false;
+
+        ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
         ChunkGenerator generator = level.getChunkSource().getGenerator();
-        List<ChunkAccess> regionChunks = new ArrayList<>(CHUNK_CACHE.values());
+        if (util == null) return false;
+
+        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
+        int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+        for (ChunkPos cp : chunksToDecorate) {
+            minX = Math.min(minX, cp.x);
+            maxX = Math.max(maxX, cp.x);
+            minZ = Math.min(minZ, cp.z);
+            maxZ = Math.max(maxZ, cp.z);
+        }
+
+        // After computing minX, maxX, minZ, maxZ and expanding by C...
+        int sideX = maxX - minX + 3;
+        int sideZ = maxZ - minZ + 3;
+        int side = Math.max(sideX, sideZ);
+
+        if (side % 2 == 0) side++;
+        int centerX = (minX + maxX) / 2;
+        int centerZ = (minZ + maxZ) / 2;
+        minX = centerX - side / 2;
+        maxX = centerX + side / 2;
+        minZ = centerZ - side / 2;
+        maxZ = centerZ + side / 2;
+
+        List<ChunkAccess> regionChunks = new ArrayList<>(side * side);
+        for (int z = minZ; z <= maxZ; z++) {
+            for (int x = minX; x <= maxX; x++) {
+                regionChunks.add(createProtoChunk(level, new ChunkPos(x, z)));
+            }
+        }
+
+        int writeRadius = side/2-1;
         WorldGenRegion region = new WorldGenRegion(level, regionChunks, ChunkStatus.FEATURES, writeRadius);
 
+        // 5. Set structure starts + references on all proto chunks
         for (ProtoChunk proto : CHUNK_CACHE.values()) {
             proto.setAllStarts(starts);
             starts.forEach((s, start) ->
                 proto.addReferenceForStructure(s, start.getChunkPos().toLong()));
         }
 
+        // 6. Decorate only the requested chunks
         for (ChunkPos cp : chunksToDecorate) {
             ProtoChunk centerChunk = CHUNK_CACHE.get(cp);
             if (centerChunk == null) continue;
@@ -126,6 +164,13 @@ public class ChunkRegenerator {
                 level.structureManager().forWorldGenRegion(region));
             centerChunk.setStatus(ChunkStatus.FEATURES);
         }
+
+        return true;
+    } catch (Exception e) {
+        LoggerProject.logError(CLASS_ID + "013", "Decoration failed: " + e.getMessage());
+        return false;
+    }
+
     }
 
 
@@ -149,21 +194,21 @@ public class ChunkRegenerator {
             .collect(Collectors.toList());
 
 
-        return resetTerrain(chunk, level, pos, fullChunk, chunks, true );
+        return resetTerrain(chunk, level, pos, chunks );
     }
 
     private static Map<ChunkPos, ProtoChunk> CHUNK_CACHE = new ConcurrentHashMap<>();
     public static ProtoChunk createProtoChunk(Level level, ChunkPos pos) {
-
         if(CHUNK_CACHE.containsKey(pos)) return CHUNK_CACHE.get(pos);
         try {
             Registry<Biome> biomeRegistry = level.registryAccess().registryOrThrow(Registries.BIOME);
-            ProtoChunk pc = new ProtoChunk(pos,  UpgradeData.EMPTY, level, biomeRegistry, null);
+            ProtoChunk pc = new ProtoChunk(pos, UpgradeData.EMPTY, level, biomeRegistry, null);
             CHUNK_CACHE.put(pos, pc);
+            return pc;  // <-- return the newly created chunk
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "002", "Failed to create scratch chunk: " + e.getMessage());
+            return null;
         }
-        return null;
     }
 
     public static void clearCache(Set<ChunkPos> toClear) {
@@ -186,8 +231,10 @@ public class ChunkRegenerator {
     {
         int minSection = target.getMinSection();
         int maxSection = target.getMaxSection();
+        Level level = target.getLevel();
 
-        for (int sectionY = minSection; sectionY < maxSection; sectionY++) {
+        for (int sectionY = minSection; sectionY < maxSection; sectionY++)
+        {
             int blockMinY = SectionPos.sectionToBlockCoord(sectionY);
             int blockMaxY = blockMinY + 15;
 
@@ -199,7 +246,15 @@ public class ChunkRegenerator {
 
             if(sourceSection.hasOnlyAir() && targetSection.hasOnlyAir()) continue;
             copyBlockStates(sourceSection, targetSection, target.getPos(), sectionY, region);
+
+            // Mark affected sections dirty in the light engine so it recomputes
+            SectionPos sectionPos = SectionPos.of(target.getPos(), sectionY);
+            level.getLightEngine().updateSectionStatus(sectionPos, false);
+
         }
+
+        // Also flag sky + block light as needing a full re-check for this chunk
+        level.getChunkSource().getLightEngine().propagateLightSources(target.getPos());
     }
 
     // Per-block copy within a section, respecting the bounding box.
@@ -226,11 +281,18 @@ public class ChunkRegenerator {
     }
 
     // Sends block updates to clients for all blocks within the bounding box.
-    private static void notifyClients(ServerLevel level, LevelChunk chunk, BoundingBox region) {
+    private static void notifyClients(ServerLevel level, LevelChunk chunk, BoundingBox region)
+    {
+        level.getChunkSource().getLightEngine().propagateLightSources(chunk.getPos());
+
+        ClientboundForgetLevelChunkPacket forget =
+        new ClientboundForgetLevelChunkPacket(chunk.getPos().x, chunk.getPos().z);
+
         HBUtil.PlayerUtil.getAllPlayers().forEach(player -> {
+            player.connection.send(forget);
             player.connection.send(new ClientboundLevelChunkWithLightPacket(
-                chunk, level.getLightEngine(), null, null
-            ));
+                chunk, level.getLightEngine(), null, null ));
         });
+
     }
 }

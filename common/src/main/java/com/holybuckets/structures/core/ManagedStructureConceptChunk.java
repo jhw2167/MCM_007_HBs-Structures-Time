@@ -9,6 +9,7 @@ import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.foundation.modelInterface.IMangedChunkData;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
+import com.holybuckets.structures.mixin.ChunkAccessAccessor;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
@@ -61,7 +62,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private ChunkPos pos;
     private int stage;
     private StructureConcept structureConcept;
-    private StructureSetStartContext structureStartContext;
     private LevelChunk chunk;
     private ProtoChunk protoChunk;
     private Map<Structure, StructureStart> structureStarts;
@@ -93,11 +93,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.level = level;
         this.pos = cp;
         this.id = ChunkUtil.getId(cp);
-        this.structureStartContext = ctx;
         ResourceLocation sourceStruct = MOD_CONFIG.loc(ctx.structure);
         this.structureConcept = MOD_CONFIG.getStructureConcept(sourceStruct);
         this.stage = stage;
-        generateAllStructureStarts();
+        generateAllStructureStarts(ctx.structureStart);
     }
 
     //** Events **/
@@ -164,11 +163,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         level = (ServerLevel) event.getLevel();
 
         //add all structure starts to chunks
-        if(structureStarts != null && chunk != null) {
-            for(Structure s : structureStarts.keySet()) {
-                if(chunk.getAllStarts().containsKey(s)) continue;
-                chunk.setStartForStructure(s, structureStarts.get(s));
-            }
+        if(structureStarts != null && chunk != null)
+        {
+            if(structureStarts.isEmpty() && !chunk.getAllStarts().isEmpty())
+                structureStarts.putAll(chunk.getAllStarts());
+            else if(chunk.getAllStarts().isEmpty() && !structureStarts.isEmpty())
+                ((ChunkAccessAccessor) chunk).getRealStructureStarts().putAll(structureStarts);
         }
     }
 
@@ -224,9 +224,14 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      * predicate, then constructs and stores a StructureStart in the chunk's structureStarts map.
      * Goes one layer deeper than Structure::generate to bypass the outer validity guard.
      */
-    public void generateAllStructureStarts()
+    public void generateAllStructureStarts(StructureStart sStart)
     {
-        if (level == null || structureStartContext == null || structureConcept == null) return;
+        if (level == null || structureConcept == null) return;
+        if(sStart==null) {
+            Structure originalChunkStruct = MOD_CONFIG.structure(structureConcept.getSourceStructure());
+            sStart = chunk.getAllStarts().get(originalChunkStruct);
+        }
+        structureStarts.put(MOD_CONFIG.structure(structureConcept.getSourceStructure()), sStart);
 
         ChunkGenerator generator = level.getChunkSource().getGenerator();
         RandomState randomState = level.getChunkSource().randomState();
@@ -243,7 +248,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             if (mcStructure == null) continue;
 
             if(mcStructure == ModConfig.EMPTY_STRUCT) {
-                structureStarts.put(mcStructure, structureStartContext.structureStart);
+                structureStarts.put(mcStructure, sStart);
                 continue;
             }
             if(structureStarts.get(mcStructure) != null) {
@@ -283,7 +288,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         //2. Check if Structure is available
         StructureConcept.StructureConceptStage conceptStage = structureConcept.getStage(stage);
-        if (conceptStage == null || conceptStage.isEmpty()) {
+        if (conceptStage == null) {
             this.stage = stage;
             return;
         }
@@ -294,13 +299,17 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             return;
         }
 
+        if(previousbox==null && MOD_CONFIG.isEmptyStructure(strLoc)) {
+            this.stage = stage;
+            return;
+        }
+
         //Empty structures are processed to clear the land as well
         currentStructure = MOD_CONFIG.structure(conceptStage.getStructureLoc());
         currentStructureStart = chunk.getStartForStructure(currentStructure);
-
-        if(currentStructureStart == null) return;
-        if (!currentStructureStart.isValid()) return;
-
+        if(currentStructureStart == null || !currentStructureStart.isValid()) {
+            generateAllStructureStarts(null);
+        }
 
         //3. Obtain all old chunksPos for clearing
         ResourceLocation prevStructLoc = structureConcept.getStage(this.stage).getStructureLoc();
@@ -322,9 +331,18 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
 
         //4. Check if all chunks are available for chunk regeneration
-        BoundingBox box = currentStructureStart.getBoundingBox();
-        box = new BoundingBox(box.minX(), box.minY(), box.minZ(),
-            box.maxX(), level.getMaxBuildHeight(), box.maxZ());
+
+        BoundingBox box  = previousbox;
+        {
+            BoundingBox structBox = currentStructureStart.getBoundingBox();
+            if(box==null)
+                box = structBox;
+            else
+                box = new BoundingBox(
+                    Math.min(box.minX(), structBox.minX()), structBox.minY(), Math.min(box.minZ(), structBox.minZ()),
+                    Math.max(box.maxX(), structBox.maxX()), structBox.maxY(), Math.max(box.maxZ(), structBox.maxZ())
+                );
+        }
         ChunkPos minPos = new ChunkPos(SectionPos.blockToSectionCoord(box.minX()), SectionPos.blockToSectionCoord(box.minZ()));
         ChunkPos maxPos = new ChunkPos(SectionPos.blockToSectionCoord(box.maxX()), SectionPos.blockToSectionCoord(box.maxZ()));
         previousbox = currentBox;
@@ -339,6 +357,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     }
 
+    //here
     private void handleStructureUpgradeOnTick()
     {
         if(!pendingUpgrade) return;
@@ -405,6 +424,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     {
         // Phase 2: Decorate all affected chunks in one batch
         List<ChunkPos> allAffected = new ArrayList<>(allAffectedChunks);
+
         ChunkRegenerator.applyDecorationBatch(level, allAffected, structureStarts);
 
 

@@ -154,7 +154,10 @@ public class ModConfig {
         return (s != null) ? loc : null;
     }
 
+    /** Default structure instance indicating the previous structure should be removed **/
     public static Structure EMPTY_STRUCT;
+
+    /**utility structure that indicates the concept stage should be skipped, but don't touch existing sturcture**/
     public static Structure SKIP_STRUCT;
 
     private void onBeforeServerStarted()
