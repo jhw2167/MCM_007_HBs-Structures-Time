@@ -485,9 +485,11 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
             case COPY_MOBS:
                 if(!structureConcept.getStage(stage).isIncludeEntities()) {
-                    phase = UpgradePhase.DONE; break;
+                    //nothing
+                } else {
+                    entities.forEach(level::addFreshEntity);
                 }
-                entities.forEach(level::addFreshEntity);
+                phase = UpgradePhase.DONE;
                 break;
 
             case DONE:
@@ -585,7 +587,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 String dimensionId = key.split("\\|")[0];
                if( !level.equals( LevelUtil.toLevel(LevelUtil.LevelNameSpace.SERVER, dimensionId) ) )
                     continue;
-                if (currentBox.isInside(spawnPoints.get(key))) {
+               if(currentBox == null) {
+                    List<ChunkPos> localchunks = HBUtil.ChunkUtil.getLocalChunkPos(chunk.getPos(), 5);
+                    if(localchunks.contains(ChunkUtil.getChunkPos(spawnPoints.get(key)))) {
+                        throwUpgradeRejection(1);
+                    }
+               } else if (currentBox.isInside(spawnPoints.get(key))) {
                     throwUpgradeRejection(1);
                 }
             }
@@ -692,6 +699,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             tag.putInt("stage", this.stage);
         }
 
+        tag.putBoolean("rejectedUpgrade", this.upgradeRejected);
+
         tag.putString("structure", structureConcept.getStructureConceptId());
 
         // Serialize structure starts using vanilla StructureStart.createTag
@@ -732,6 +741,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if (conceptId != null && !conceptId.isEmpty()) {
             this.structureConcept = MOD_CONFIG.getStructureConcept(conceptId);
         }
+
+        this.upgradeRejected =tag.contains("rejectedUpgrade") && tag.getBoolean("rejectedUpgrade");
 
         // Deserialize structure starts using vanilla StructureStart.loadStaticStart
         if (tag.contains("structureStarts")) {

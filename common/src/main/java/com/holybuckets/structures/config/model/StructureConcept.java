@@ -46,6 +46,8 @@ public class StructureConcept {
         private boolean includeEntities;
         private boolean includeLoot;
 
+        private String upgradeStructureTrigger="32"; //can be an item, a dimension, or a number of days
+
         public StructureConceptStage(int stage, String structureId) {
             this.stage = stage;
             this.structureId = (structureId == null) ? "" : structureId;
@@ -117,6 +119,7 @@ public class StructureConcept {
             obj.addProperty("structureId", structureId);
             obj.addProperty("includeEntities", includeEntities);
             obj.addProperty("includeLoot", includeLoot);
+            obj.addProperty("upgradeStructureTrigger", upgradeStructureTrigger);
             return obj;
         }
 
@@ -295,6 +298,11 @@ public class StructureConcept {
         int stopDays  = obj.has("stopUpgradeOnDaysSpentInStructure")
             ? obj.get("stopUpgradeOnDaysSpentInStructure").getAsInt()
             : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnDaysSpentInStructure;
+
+        //get upgradeStructureTrigger
+        String upgradeTrigger = obj.has("upgradeStructureTrigger")
+            ? obj.get("upgradeStructureTrigger").getAsString()
+            : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
 
         List<StructureConceptStage> stages = new ArrayList<>();
         if (obj.has("stages") && obj.get("stages").isJsonArray()) {

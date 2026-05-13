@@ -262,7 +262,7 @@ public class StructureConceptManager {
     }
 
     public static Map<String, BlockPos> getPlayerSpawnPos() {
-        return Collections.unmodifiableMap(playerSpawnPos);
+        return playerSpawnPos;
     }
 
 
@@ -316,6 +316,7 @@ public class StructureConceptManager {
     private static void onDailyTickEvent(ServerTickEvent event) {
         //track player spawn points
         for(ServerPlayer player : HBUtil.PlayerUtil.getAllPlayers()) {
+            if(player.getRespawnPosition() == null) continue;
             String dim = HBUtil.LevelUtil.toLevelId(player.level());
             String name = HBUtil.PlayerUtil.getId(player);
             playerSpawnPos.put(dim+"|"+name, player.getRespawnPosition());

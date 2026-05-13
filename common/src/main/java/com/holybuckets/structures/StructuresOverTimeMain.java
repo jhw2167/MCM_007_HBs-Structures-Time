@@ -1,12 +1,16 @@
 package com.holybuckets.structures;
 
 
+import com.holybuckets.foundation.event.BalmEventRegister;
 import com.holybuckets.foundation.event.EventRegistrar;
 import com.holybuckets.structures.command.CommandList;
 import com.holybuckets.structures.config.ModConfig;
+import com.holybuckets.structures.config.StructureConceptJsonConfig;
 import com.holybuckets.structures.config.StructuresTimeConfig;
 import com.holybuckets.structures.core.StructureConceptManager;
 import net.blay09.mods.balm.api.Balm;
+import net.blay09.mods.balm.api.event.BalmEvents;
+import net.blay09.mods.balm.api.event.ConfigLoadedEvent;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
 
 /**
@@ -50,11 +54,17 @@ public class StructuresOverTimeMain {
 
         //register local events
         registrar.registerOnBeforeServerStarted(this::onServerStarting);
+        Balm.getEvents().onEvent(ConfigLoadedEvent.class, this::onRegisterConfig);
 
     }
 
-    private void onServerStarting(ServerStartingEvent e) {
+    private void onRegisterConfig(ConfigLoadedEvent event) {
         CONFIG = Balm.getConfig().getActiveConfig(StructuresTimeConfig.class);
+        StructureConceptJsonConfig.initDefaultConfig();
+    }
+
+    private void onServerStarting(ServerStartingEvent e) {
+
         //this.DEV_MODE = CONFIG.devMode;
         this.DEV_MODE = false;
     }
