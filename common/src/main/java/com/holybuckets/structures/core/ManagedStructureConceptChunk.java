@@ -7,22 +7,21 @@ import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.foundation.modelInterface.IMangedChunkData;
-import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
 import com.holybuckets.structures.mixin.ChunkAccessAccessor;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.*;
-import net. minecraft. world. level. levelgen.RandomSupport;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.levelgen.WorldgenRandom;
-import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
@@ -81,6 +80,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private Set<ChunkPos> chunksCompletedRefresh; //ChunkPos succesfully refreshed terrain
     private Set<ChunkPos> chunksCompletedUpgrade; //ChunkPos that successfully regenerated structure
 
+    private List<BlockPos> lootPositions; //to be used for copying loot contents
+    private List<Entity> entities; //to be used for copying mobs
 
     /** Constructors **/
 
@@ -98,6 +99,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.chunksCompletedUpgrade = new HashSet<>();
 
         this.structureBoxes = new HashMap<>();
+        this.lootPositions = new ArrayList<>();
+        this.entities = new ArrayList<>();
     }
 
     public ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp, StructureSetStartContext ctx, int stage) {
@@ -256,8 +259,14 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         StructureTemplateManager templateManager = level.getServer().getStructureManager();
         RegistryAccess registryAccess = level.registryAccess();
         long seed = level.getSeed();
+        // holder -> true forces generation regardless of biome
+        Structure.GenerationContext ctx = new Structure.GenerationContext(
+            registryAccess, generator, generator.getBiomeSource(),
+            randomState, templateManager, seed, pos, level, holder -> true
+        );
 
-        for (int s = 1; s <= structureConcept.getStages().size(); s++) {
+        for (int s = 1; s <= structureConcept.getStages().size(); s++)
+        {
             StructureConcept.StructureConceptStage conceptStage = structureConcept.getStage(s);
             if (conceptStage == null || conceptStage.isEmpty()) continue;
 
@@ -272,12 +281,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 continue;
             }
 
-            // holder -> true forces generation regardless of biome
-            Structure.GenerationContext ctx = new Structure.GenerationContext(
-                registryAccess, generator, generator.getBiomeSource(),
-                randomState, templateManager, seed, pos, level, holder -> true
-            );
-
             Optional<Structure.GenerationStub> stub = mcStructure.findValidGenerationPoint(ctx);
             if (stub.isEmpty()) continue;
 
@@ -289,12 +292,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         }
 
         if (structureStarts.isEmpty()) return;
-        this.structureConcept.getStages().forEach(stage -> {
+        for (StructureConcept.StructureConceptStage stage : structureConcept.getStages()) {
             Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
-            StructureStart start = structureStarts.get(s);
+            StructureStart start = structureStarts.getOrDefault(s, sStart);
             BoundingBox bb = start.getBoundingBox();
             structureBoxes.put(stage.getStructureLoc(), bb);
-        });
+        }
 
         setInstance(level, id, this);
     }
@@ -384,7 +387,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     }
 
     //here
-    enum UpgradePhase {TERRAIN, DECORATE, COPY, DONE}
+    enum UpgradePhase {TERRAIN, DECORATE, COPY, COPY_LOOT, COPY_MOBS, DONE}
 
     private UpgradePhase phase = UpgradePhase.TERRAIN;
     private int chunkIndex = 0;
@@ -414,8 +417,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 // One batch call — only touches proto chunks in RAM
                 var starts = new HashMap();
                 starts.put(currentStructure, structureStarts.get(currentStructure));
-                boolean success = ChunkRegenerator.applyDecorationBatch(
-                    level, affectedUpgradeChunks, starts);
+                boolean success = ChunkRegenerator.applyDecorationBatch(level, affectedUpgradeChunks,
+                 starts, currentBox, entities);
                 if (success) {
                     phase = UpgradePhase.COPY;
                     chunkIndex = 0;
@@ -425,20 +428,47 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
             case COPY:
                 if (chunkIndex >= affectedUpgradeChunks.size()) {
-                    phase = UpgradePhase.DONE;
+                    phase = UpgradePhase.COPY_LOOT;
                     break;
                 }
                 ChunkPos copyPos = affectedUpgradeChunks.get(chunkIndex);
                 BoundingBox area = getAreaForChunk(copyPos); // full chunk or structure box
-                ChunkRegenerator.copyChunk(level, copyPos, area);
+                ChunkRegenerator.copyChunk(level, copyPos, area, lootPositions);
                 chunkIndex++;
+                break;
+
+            case COPY_LOOT:
+                if(!structureConcept.getStage(stage).isIncludeLoot()) {
+                    phase = UpgradePhase.COPY_MOBS; break;
+                }
+                //iterate over lootPos. If a chest exists there in the real world (level) chunk,
+                //call ChunkRegenerator.copyLoot(Blockpos pos, LevelChunk chunk)
+                for(BlockPos pos : lootPositions) {
+                    ChunkRegenerator.copyLoot(level, pos);
+                }
+                phase = UpgradePhase.COPY_MOBS;
+                break;
+
+            case COPY_MOBS:
+                if(!structureConcept.getStage(stage).isIncludeEntities()) {
+                    phase = UpgradePhase.DONE; break;
+                }
+                entities.forEach(level::addFreshEntity);
                 break;
 
             case DONE:
                 ChunkRegenerator.clearCache(new HashSet<>(affectedUpgradeChunks));
+                lootPositions.clear();
+                entities.clear();
                 pendingUpgrade = false;
                 phase = UpgradePhase.TERRAIN;
                 chunkIndex = 0;
+                if(currentStructure != null && !MOD_CONFIG.isSkipStructure(currentStructure) ) {
+                    StructureStart start = structureStarts.get(currentStructure);
+                    chunk.setStartForStructure(currentStructure, start);
+                    chunk.addReferenceForStructure(currentStructure, start.getChunkPos().toLong());
+                }
+
                 break;
         }
     }

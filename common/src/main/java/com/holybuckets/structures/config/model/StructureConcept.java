@@ -39,17 +39,21 @@ public class StructureConcept {
         private final int stage;
         private final String structureId;
         private ResourceLocation structureLoc;
+        private boolean includeEntities;
+        private boolean includeLoot;
 
         public StructureConceptStage(int stage, String structureId) {
             this.stage = stage;
             this.structureId = (structureId == null) ? "" : structureId;
             this.structureLoc = null;
+            includeEntities = true;
+            includeLoot = true;
         }
 
-        public StructureConceptStage(int stage, ResourceLocation loc) {
-            this.stage = stage;
-            this.structureId = (loc == null) ? "" : loc.toString();
-            this.structureLoc = loc;
+        public StructureConceptStage(int stage, String structureId, boolean addMobs, boolean addLoot) {
+            this(stage, structureId);
+            this.includeEntities = addMobs;
+            this.includeLoot = addLoot;
         }
 
         // -- Getters --
@@ -65,6 +69,15 @@ public class StructureConcept {
         @Nullable
         public ResourceLocation getStructureLoc() {
             return structureLoc;
+        }
+
+        //include loot and mobs getters
+        public boolean isIncludeEntities() {
+            return includeEntities;
+        }
+
+        public boolean isIncludeLoot() {
+            return includeLoot;
         }
 
         /** Returns true if this stage has an actual structure to place. */
@@ -98,13 +111,20 @@ public class StructureConcept {
             JsonObject obj = new JsonObject();
             obj.addProperty("stage", stage);
             obj.addProperty("structureId", structureId);
+            obj.addProperty("includeEntities", includeEntities);
+            obj.addProperty("includeLoot", includeLoot);
             return obj;
         }
 
         public static StructureConceptStage deserialize(JsonObject obj) {
             int stage       = obj.has("stage")       ? obj.get("stage").getAsInt()         : 1;
             String structId = obj.has("structureId") ? obj.get("structureId").getAsString() : "";
-            return new StructureConceptStage(stage, structId);
+            boolean addMobs = true;
+            boolean addLoot = true;
+            if( obj.has("includeEntities") ) addMobs = obj.get("includeEntities").getAsBoolean();
+            if( obj.has("includeLoot") ) addLoot = obj.get("includeLoot").getAsBoolean();
+
+            return new StructureConceptStage(stage, structId, addMobs, addLoot);
         }
     }
 

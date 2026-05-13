@@ -4,17 +4,21 @@ import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.structures.LoggerProject;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.levelgen.GenerationStep;
@@ -23,6 +27,7 @@ import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.phys.AABB;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -106,7 +111,8 @@ public class ChunkRegenerator {
      * Returns false if any chunk in the grid is not fully loaded.
      */
     public static boolean applyDecorationBatch(ServerLevel level, List<ChunkPos> chunksToDecorate,
-                                               Map<Structure, StructureStart> starts) {
+                                               Map<Structure, StructureStart> starts,
+                                               BoundingBox structureArea, List<Entity> entities ) {
         try {
             if (chunksToDecorate.isEmpty() || CHUNK_CACHE.isEmpty()) return false;
 
@@ -175,6 +181,12 @@ public class ChunkRegenerator {
                 centerChunk.setStatus(ChunkStatus.FEATURES);
             }
 
+
+            entities.addAll( region.getEntities(null, new AABB(
+                structureArea.minX(), structureArea.minY(), structureArea.minZ(),
+                structureArea.maxX(), structureArea.maxY(), structureArea.maxZ()
+            )) );
+
             return true;
         } catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "013", "Decoration failed: " + e.getMessage());
@@ -225,7 +237,8 @@ public class ChunkRegenerator {
         CHUNK_CACHE.keySet().removeAll(toClear);
     }
 
-    public static void copyChunk(ServerLevel level, ChunkPos pos, BoundingBox area) {
+    public static void copyChunk(ServerLevel level, ChunkPos pos, BoundingBox area,
+    List<BlockPos> lootPos) {
         ProtoChunk proto = CHUNK_CACHE.get(pos);
         if (proto == null) return;
 
@@ -233,6 +246,11 @@ public class ChunkRegenerator {
         copySections(proto, live, area);
         live.setUnsaved(true);
         notifyClients(level, live, area);
+
+        //save all the lootable entities for players to loot
+        lootPos.addAll(proto.getBlockEntitiesPos().stream()
+            .filter(area::isInside)
+            .collect(Collectors.toList()));
     }
 
     // Copies block state data from the scratch ProtoChunk into the live LevelChunk, bounded by region.
@@ -287,6 +305,30 @@ public class ChunkRegenerator {
         }
     }
 
+    /**
+     * Copies chest loot for structures for any block entity in the passed position.
+     * Attempts to copy using NBT save and load
+     * @param level
+     * @param pos
+     */
+    public static void copyLoot(ServerLevel level, BlockPos pos) {
+        ProtoChunk proto = CHUNK_CACHE.get(new ChunkPos(pos));
+        if (proto == null) return;
+        BlockEntity oldBe = proto.getBlockEntity(pos);
+        BlockEntity newBe = level.getBlockEntity(pos);
+        if (oldBe == null || newBe==null) return;
+        CompoundTag itemData = oldBe.saveWithFullMetadata();
+        newBe.load(itemData);
+    }
+
+    /**
+     * Copy Mobs - copy the entities and all their properties from the protochunk to the live chunk.
+     * @param level
+     * @param chunk
+     * @param region
+     */
+
+
     private static void notifyClients(ServerLevel level, LevelChunk chunk, BoundingBox region) {
         level.getChunkSource().getLightEngine().propagateLightSources(chunk.getPos());
 
@@ -300,5 +342,6 @@ public class ChunkRegenerator {
             ));
         });
     }
+
 
 }

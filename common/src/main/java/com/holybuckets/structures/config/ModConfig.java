@@ -14,7 +14,6 @@ import net.blay09.mods.balm.api.event.server.ServerStoppedEvent;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.levelgen.structure.Structure;
@@ -164,7 +163,7 @@ public class ModConfig {
     {
         MinecraftServer server = GeneralConfig.getInstance().getServer();
         StructuresTimeConfig activeConfig = Balm.getConfig().getActiveConfig(StructuresTimeConfig.class);
-        String configPath = activeConfig.structureRulesConfig;
+        String configPath = activeConfig.structureProgressConfig;
 
         File configFile        = new File(configPath);
         File defaultConfigFile = new File(StructureConceptJsonConfig.DEF_CONFIG_FILE_PATH);

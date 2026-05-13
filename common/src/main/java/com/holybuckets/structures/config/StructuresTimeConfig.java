@@ -10,8 +10,11 @@ public class StructuresTimeConfig {
 
     @Comment("devMode==true...")
     public boolean devMode = false;
-    @Comment("Where the structure concept configs can be found")
-    public String structureRulesConfig = "config/HBStructuresConceptConfig.json";
+    @Comment("The file path to your structure concepts configuration. This file determines the origin structure and order for each structure in your progression chain")
+    public String structureProgressConfig = "config/HBStructuresConceptConfig.json";
+
+    @Comment("The file path to your general Structures Over Time Config. This file blacklists structures from spawning naturally and allows you to control the stage progression")
+    public String structureGeneralConfig = "config/HBStructuresGeneralConfig.json";
 
 
     public static class SatelliteBlockConfig {
