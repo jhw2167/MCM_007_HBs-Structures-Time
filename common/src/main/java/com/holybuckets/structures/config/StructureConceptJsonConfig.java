@@ -41,6 +41,36 @@ public class StructureConceptJsonConfig implements IStringSerializable {
     }
 
 
+
+    public Set<String> getAllConceptIds() {
+        return Collections.unmodifiableSet(conceptMap.keySet());
+    }
+
+    public Collection<StructureConcept> getAllConcepts() {
+        return Collections.unmodifiableCollection(conceptMap.values());
+    }
+
+    @Nullable
+    public StructureConcept getConcept(String conceptId) {
+        return conceptMap.get(conceptId);
+    }
+
+    public boolean hasConcept(String conceptId) {
+        return conceptMap.containsKey(conceptId);
+    }
+
+    public int size() {
+        return conceptMap.size();
+    }
+
+    /** Removes a concept by id. Used during registry resolution pruning. */
+    public void removeConcept(String conceptId) {
+        conceptMap.remove(conceptId);
+    }
+
+
+    //** SERIALIZERS **//
+
     @Override
     public String serialize() {
         JsonArray root = new JsonArray();
@@ -72,32 +102,8 @@ public class StructureConceptJsonConfig implements IStringSerializable {
         }
     }
 
-    public Set<String> getAllConceptIds() {
-        return Collections.unmodifiableSet(conceptMap.keySet());
-    }
 
-    public Collection<StructureConcept> getAllConcepts() {
-        return Collections.unmodifiableCollection(conceptMap.values());
-    }
-
-    @Nullable
-    public StructureConcept getConcept(String conceptId) {
-        return conceptMap.get(conceptId);
-    }
-
-    public boolean hasConcept(String conceptId) {
-        return conceptMap.containsKey(conceptId);
-    }
-
-    public int size() {
-        return conceptMap.size();
-    }
-
-    /** Removes a concept by id. Used during registry resolution pruning. */
-    public void removeConcept(String conceptId) {
-        conceptMap.remove(conceptId);
-    }
-
+    //** DEFAULTS **//
 
     private static StructureConceptJsonConfig buildDefaultConfig() {
         List<StructureConcept> concepts = new ArrayList<>();

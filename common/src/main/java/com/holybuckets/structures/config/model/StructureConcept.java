@@ -3,12 +3,11 @@ package com.holybuckets.structures.config.model;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.holybuckets.structures.StructuresOverTimeMain;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.levelgen.structure.Structure;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -26,13 +25,18 @@ import java.util.List;
  */
 public class StructureConcept {
 
-    public boolean hasStructure(ResourceLocation loc) {
-        if (loc == null) return false;
-        for (StructureConceptStage stage : stages) {
-            if (stage.is(loc)) return true;
-        }
-        return false;
-    }
+
+    private final String structureConceptId;
+    private final String sourceStructureId;
+    private final String comments;
+
+    private boolean stopUpgradeIfSpawnpointSet;         //stops structure from upgrading if player spawnpoint is set in the structure
+    private int stopUpgradeOnTotalChestCount;       //stops structure upgrade if a lot of chest on placed in the structure
+    private int stopUpgradeOnDaysSpentInStructure;  //stops structure upgrade if significant time is spent in structure
+
+    private final List<StructureConceptStage> stages;
+
+    private ResourceLocation sourceStructure;
 
     public static class StructureConceptStage {
 
@@ -129,12 +133,8 @@ public class StructureConcept {
     }
 
 
-    private final String structureConceptId;
-    private final String sourceStructureId;
-    private final String comments;
-    private final List<StructureConceptStage> stages;
+    //** Constructors **//
 
-    private ResourceLocation sourceStructure;
 
     public StructureConcept(String structureConceptId, String sourceStructureId,
                             String comments, List<StructureConceptStage> stages) {
@@ -143,6 +143,31 @@ public class StructureConcept {
         this.comments           = (comments == null) ? "" : comments;
         this.stages             = (stages == null) ? new ArrayList<>() : new ArrayList<>(stages);
         this.sourceStructure    = null;
+        this.stopUpgradeIfSpawnpointSet        = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeIfSpawnpointSet;
+        this.stopUpgradeOnTotalChestCount      = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnTotalChestCount;
+        this.stopUpgradeOnDaysSpentInStructure = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnDaysSpentInStructure;
+    }
+
+    // Wide constructor delegates to the narrow one then overrides upgrade-stop flags
+    public StructureConcept(String structureConceptId, String sourceStructureId,
+                            String comments, List<StructureConceptStage> stages,
+                            boolean stopUpgradeIfSpawnpointSet,
+                            int stopUpgradeOnTotalChestCount,
+                            int stopUpgradeOnDaysSpentInStructure) {
+        this(structureConceptId, sourceStructureId, comments, stages);
+        this.stopUpgradeIfSpawnpointSet        = stopUpgradeIfSpawnpointSet;
+        this.stopUpgradeOnTotalChestCount      = stopUpgradeOnTotalChestCount;
+        this.stopUpgradeOnDaysSpentInStructure = stopUpgradeOnDaysSpentInStructure;
+    }
+
+
+
+    public boolean hasStructure(ResourceLocation loc) {
+        if (loc == null) return false;
+        for (StructureConceptStage stage : stages) {
+            if (stage.is(loc)) return true;
+        }
+        return false;
     }
 
 
@@ -156,6 +181,19 @@ public class StructureConcept {
 
     public String getComments() {
         return comments;
+    }
+
+    //add getters for new variables
+    public boolean isStopUpgradeIfSpawnpointSet() {
+        return stopUpgradeIfSpawnpointSet;
+    }
+
+    public int getStopUpgradeOnTotalChestCount() {
+        return stopUpgradeOnTotalChestCount;
+    }
+
+    public int getStopUpgradeOnDaysSpentInStructure() {
+        return stopUpgradeOnDaysSpentInStructure;
     }
 
     @Nullable
@@ -227,6 +265,9 @@ public class StructureConcept {
         obj.addProperty("structureConceptId", structureConceptId);
         obj.addProperty("sourceStructureId", sourceStructureId);
         obj.addProperty("comments", comments);
+        obj.addProperty("stopUpgradeIfSpawnpointSet", stopUpgradeIfSpawnpointSet);
+        obj.addProperty("stopUpgradeOnTotalChestCount", stopUpgradeOnTotalChestCount);
+        obj.addProperty("stopUpgradeOnDaysSpentInStructure", stopUpgradeOnDaysSpentInStructure);
 
         JsonArray stagesArray = new JsonArray();
         for (StructureConceptStage stage : stages) {
@@ -245,6 +286,16 @@ public class StructureConcept {
         String comments  = obj.has("comments")
             ? obj.get("comments").getAsString() : "";
 
+        boolean stopSpawn = obj.has("stopUpgradeIfSpawnpointSet")
+            ? obj.get("stopUpgradeIfSpawnpointSet").getAsBoolean()
+            : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeIfSpawnpointSet;
+        int stopChest = obj.has("stopUpgradeOnTotalChestCount")
+            ? obj.get("stopUpgradeOnTotalChestCount").getAsInt()
+            : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnTotalChestCount;
+        int stopDays  = obj.has("stopUpgradeOnDaysSpentInStructure")
+            ? obj.get("stopUpgradeOnDaysSpentInStructure").getAsInt()
+            : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnDaysSpentInStructure;
+
         List<StructureConceptStage> stages = new ArrayList<>();
         if (obj.has("stages") && obj.get("stages").isJsonArray()) {
             JsonArray arr = obj.getAsJsonArray("stages");
@@ -255,6 +306,7 @@ public class StructureConcept {
             }
         }
 
-        return new StructureConcept(conceptId, sourceId, comments, stages);
+        return new StructureConcept(conceptId, sourceId, comments, stages,
+            stopSpawn, stopChest, stopDays);
     }
 }

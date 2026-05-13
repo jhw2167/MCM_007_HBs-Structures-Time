@@ -15,7 +15,7 @@ import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
  */
 public class StructuresOverTimeMain {
     private static boolean DEV_MODE = false;;
-    private static StructuresTimeConfig CONFIG;
+    public static StructuresTimeConfig CONFIG;
     public static StructuresOverTimeMain INSTANCE;
 
     public StructuresOverTimeMain()

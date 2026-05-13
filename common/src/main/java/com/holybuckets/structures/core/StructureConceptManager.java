@@ -1,6 +1,9 @@
 package com.holybuckets.structures.core;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.holybuckets.foundation.GeneralConfig;
+import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
 import com.holybuckets.foundation.datastore.DataStore;
 import com.holybuckets.foundation.event.EventRegistrar;
@@ -9,6 +12,7 @@ import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.event.custom.TickType;
 import com.google.gson.JsonPrimitive;
 import com.holybuckets.foundation.datastore.WorldSaveData;
+import com.holybuckets.foundation.event.custom.WakeUpAllPlayersEvent;
 import com.holybuckets.structures.Constants;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
@@ -16,12 +20,15 @@ import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.LevelLoadingEvent;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
@@ -50,6 +57,7 @@ public class StructureConceptManager {
     public static final String CLASS_ID = "011";
 
     private static final String KEY_GLOBAL_STAGE = "globalStage";
+    private static final String KEY_PLAYER_SPAWN_POS = "playerSpawnPos";
 
     private final ServerLevel level;
     private final Registry<Structure> registry;
@@ -61,6 +69,7 @@ public class StructureConceptManager {
     private static Map<LevelAccessor, StructureConceptManager> MANAGERS = new HashMap<>();
     private static ModConfig MOD_CONFIG;
     private static GeneralConfig GENERAL_CONFIG;
+    private static Map<String, BlockPos> playerSpawnPos = new HashMap<>();
 
 
     //** CONSTRUCTORS
@@ -80,15 +89,6 @@ public class StructureConceptManager {
         return registry.getKey(s);
     }
 
-
-
-    /**
-     * Logs the structure that is attempting to be placed.
-     */
-    private void logStructurePlacement(String type, String structureName) {
-        LoggerProject.logDebug("011030",
-            type + " called for structure: " + structureName);
-    }
 
     private void handleSetStartForStructure(StructureSetStartContext ctx) {
         String id = getStructureId(ctx.structure).toString();
@@ -157,6 +157,11 @@ public class StructureConceptManager {
         }
     }
 
+    public void removeManagedChunk(String chunkId) {
+        managedChunks.remove(chunkId);
+    }
+
+
     //** CORE
     public boolean isManagedChunk(ChunkPos chunkPos) {
         return managedChunks.containsKey(chunkPos);
@@ -185,6 +190,7 @@ public class StructureConceptManager {
 
 
 
+
     /**
      * Registers a new ManagedStructureConceptChunk for the given chunk id.
      * Only one ManagedStructureConceptChunk per chunk is allowed.
@@ -207,13 +213,10 @@ public class StructureConceptManager {
         return managed;
     }
 
-    public void removeManagedChunk(String chunkId) {
-        managedChunks.remove(chunkId);
-    }
 
     private void onDailyTick() {
         for(ManagedStructureConceptChunk chunk : managedChunks.values()) {
-            chunk.triggerStructureUpgrade(this.globalStage);
+            chunk.queueStructureUpgrade(this.globalStage);
         }
     }
 
@@ -221,13 +224,31 @@ public class StructureConceptManager {
         WorldSaveData worldData = ds.getOrCreateWorldSaveData(Constants.MOD_ID);
         com.google.gson.JsonElement stageEl = worldData.get(KEY_GLOBAL_STAGE);
         this.globalStage = (stageEl != null) ? stageEl.getAsInt() : 0;
-        LoggerProject.logDebug(CLASS_ID + "001", "Loaded globalStage: " + globalStage);
+
+        JsonElement spawnPosEl = worldData.get(KEY_PLAYER_SPAWN_POS);
+        if(spawnPosEl != null && spawnPosEl.isJsonObject()) {
+            JsonObject spawnPosObj = spawnPosEl.getAsJsonObject();
+            for(Map.Entry<String, JsonElement> entry : spawnPosObj.entrySet()) {
+                String dimAndName = entry.getKey();
+                BlockPos bp = HBUtil.BlockUtil.stringToBlockPos(entry.getValue().getAsString());
+                playerSpawnPos.put(dimAndName, bp);
+            }
+        }
+
+
     }
 
     private void save(DataStore ds) {
         WorldSaveData worldData = ds.getOrCreateWorldSaveData(Constants.MOD_ID);
         worldData.addProperty(KEY_GLOBAL_STAGE, new JsonPrimitive(this.globalStage));
         LoggerProject.logDebug(CLASS_ID + "002", "Saved globalStage: " + globalStage);
+        //Save all entries in playerSpawnPos as a json object with "key": "blockpos"
+        JsonObject spawnPosObj = new JsonObject();
+        for(Map.Entry<String, BlockPos> entry : playerSpawnPos.entrySet()) {
+            String bp = HBUtil.BlockUtil.positionToString(entry.getValue());
+            spawnPosObj.addProperty(entry.getKey(), bp);
+        }
+        worldData.addProperty(KEY_PLAYER_SPAWN_POS, spawnPosObj);
     }
 
 
@@ -240,6 +261,9 @@ public class StructureConceptManager {
         return manager.managedChunks.containsKey(pos);
     }
 
+    public static Map<String, BlockPos> getPlayerSpawnPos() {
+        return Collections.unmodifiableMap(playerSpawnPos);
+    }
 
 
     //** EVENTS
@@ -253,20 +277,9 @@ public class StructureConceptManager {
         reg.registerOnServerTick(TickType.ON_120_TICKS, StructureConceptManager::onDailyTickEvent);
         reg.registerOnServerTick(TickType.ON_SINGLE_TICK, StructureConceptManager::onServerTick);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
+        reg.registerOnWakeUpAllPlayers(StructureConceptManager::registerOnWakeUpAllPlayers);
 
         ManagedStructureConceptChunk.registerManagedChunkData();
-    }
-
-    private static void onChunkLoadEvent(ChunkLoadingEvent.Load event) {
-        if (event.getLevel().isClientSide()) return;
-
-        ServerLevel serverLevel = (ServerLevel) event.getLevel();
-        if (!serverLevel.dimension().equals(Level.OVERWORLD)) return;
-
-        StructureConceptManager manager = MANAGERS.get(serverLevel);
-        if (manager != null && manager.isManagedChunk(event.getChunkPos())) {
-            manager.handleChunkLoad(event);
-        }
     }
 
     private static void onServerStart(ServerStartingEvent event) {
@@ -287,7 +300,27 @@ public class StructureConceptManager {
         manager.load(GeneralConfig.getInstance().getDataStore());
     }
 
+
+    private static void onChunkLoadEvent(ChunkLoadingEvent.Load event) {
+        if (event.getLevel().isClientSide()) return;
+
+        ServerLevel serverLevel = (ServerLevel) event.getLevel();
+        if (!serverLevel.dimension().equals(Level.OVERWORLD)) return;
+
+        StructureConceptManager manager = MANAGERS.get(serverLevel);
+        if (manager != null && manager.isManagedChunk(event.getChunkPos())) {
+            manager.handleChunkLoad(event);
+        }
+    }
+
     private static void onDailyTickEvent(ServerTickEvent event) {
+        //track player spawn points
+        for(ServerPlayer player : HBUtil.PlayerUtil.getAllPlayers()) {
+            String dim = HBUtil.LevelUtil.toLevelId(player.level());
+            String name = HBUtil.PlayerUtil.getId(player);
+            playerSpawnPos.put(dim+"|"+name, player.getRespawnPosition());
+        }
+
         for(StructureConceptManager manager : MANAGERS.values()) {
             manager.onDailyTick();
         }
@@ -303,6 +336,12 @@ public class StructureConceptManager {
     private static void onDataSave(DatastoreSaveEvent event) {
         for(StructureConceptManager manager : MANAGERS.values()) {
             manager.save(event.getDataStore());
+        }
+    }
+
+    private static void registerOnWakeUpAllPlayers(WakeUpAllPlayersEvent event) {
+        for(StructureConceptManager manager : MANAGERS.values()) {
+            manager.managedChunks.values().forEach(chunk -> chunk.onPlayersWakeUpEvent());
         }
     }
 
@@ -328,6 +367,8 @@ public class StructureConceptManager {
                 entry.getValue().handleStructureLoad(chunkPos, structureStarts);
         }
     }
+
+
 
     //** INNER CLASSSES **/
 
