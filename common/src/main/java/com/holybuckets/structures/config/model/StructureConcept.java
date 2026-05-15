@@ -57,7 +57,7 @@ public class StructureConcept {
             this.stage = stage;
             this.structureId = (structureId == null) ? "" : structureId;
             this.structureLoc = null;
-            includeEntities = true;
+            includeEntities = false;
             includeLoot = true;
         }
 

@@ -3,6 +3,9 @@ package com.holybuckets.structures.config;
 import com.holybuckets.structures.Constants;
 import net.blay09.mods.balm.api.config.reflection.Comment;
 import net.blay09.mods.balm.api.config.reflection.Config;
+import net.blay09.mods.balm.api.config.reflection.NestedType;
+
+import java.util.Set;
 
 
 @Config(Constants.MOD_ID)
@@ -15,6 +18,49 @@ public class StructuresTimeConfig {
 
     @Comment("The file path to your general Structures Over Time Config. This file blacklists structures from spawning naturally and allows you to control the stage progression")
     public String structureGeneralConfig = "config/HBStructuresGeneralConfig.json";
+
+    @Comment("Prevent certain structures from spawning normally in the world, they will only spawn via structure upgrades. You should not blacklist the ORIGIN STRUCTURES for your structure concepts")
+    @NestedType(String.class)
+    Set<String> naturalStructureSpawnsBlacklist = Set.of(
+        "minecraft:igloo",
+        "nova_structures:tavern_oak",
+        "towns_and_towers:village_meadow"
+        /*
+        "nova_structures:villages_jungle",
+        "nova_structures:villages_swamp",
+        "nova_structures:abandoned_hut",
+        "towns_and_towers:towns",
+         "nova_structures:tavern_acacia",
+        "nova_structures:tavern_birch",
+        "nova_structures:tavern_cherry",
+        "nova_structures:tavern_dark_oak",
+        "nova_structures:tavern_desert",
+        "nova_structures:tavern_jungle",
+        "nova_structures:tavern_mangrove",
+        "nova_structures:tavern_snowy",
+        "nova_structures:tavern_spruce",
+        "nova_structures:tavern_swamp",
+        "towns_and_towers:village_badlands",
+        "towns_and_towers:village_beach",
+        "towns_and_towers:village_birch_forest",
+        "towns_and_towers:village_flower_forest",
+        "towns_and_towers:village_grove",
+        "nova_structures:village_jungle",
+        "towns_and_towers:village_jungle",
+        "towns_and_towers:village_meadow",
+        "towns_and_towers:village_mushroom_fields",
+        "towns_and_towers:village_ocean",
+        "towns_and_towers:village_old_growth_taiga",
+        "towns_and_towers:village_savanna_plateau",
+        "towns_and_towers:village_snowy_slopes",
+        "towns_and_towers:village_snowy_taiga",
+        "towns_and_towers:village_sparse_jungle",
+        "towns_and_towers:village_sunflower_plains",
+        "nova_structures:village_swamp",
+        "towns_and_towers:village_swamp",
+        "towns_and_towers:village_wooded_badlands"
+         */
+    );
 
     @Comment("Notifies all players with a chat message when a structure upgrade has been triggered")
     public boolean enableStructureUpgradeTriggeredNotification = true;

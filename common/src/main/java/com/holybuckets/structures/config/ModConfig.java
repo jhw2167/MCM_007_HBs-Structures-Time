@@ -35,6 +35,7 @@ public class ModConfig {
     private static final String CLASS_ID = "012";
     private static ModConfig INSTANCE;
     private StructureConceptJsonConfig structureConceptConfig;
+    private Set<ResourceLocation> structureBlacklist;
     private Map<ResourceLocation, StructureConcept> activeStructureConcepts;
     private Registry<Structure> registry;
 
@@ -78,7 +79,6 @@ public class ModConfig {
 
     private void initStructures(MinecraftServer server)
     {
-        this.registry = server.registryAccess().registryOrThrow(Registries.STRUCTURE);
 
         EMPTY_STRUCT = registry.getOptional(new ResourceLocation(Constants.MOD_ID,
             "empty")).orElse(null);
@@ -139,6 +139,8 @@ public class ModConfig {
         LoggerProject.logInfo(CLASS_ID + "014",
             "Registry resolution complete: " + structureConceptConfig.size()
             + " concept(s) with valid holders: " + structureConceptConfig.getAllConceptIds());
+
+
     }
 
     /**
@@ -178,9 +180,21 @@ public class ModConfig {
 
         this.structureConceptConfig = new StructureConceptJsonConfig(json);
 
-        LoggerProject.logInfo(CLASS_ID + "001",
-            "Parsed " + structureConceptConfig.size() + " structure concept(s): "
+        LoggerProject.logInfo(CLASS_ID + "001", "Parsed " + structureConceptConfig.size() + " structure concept(s): "
             + structureConceptConfig.getAllConceptIds());
+
+        //Parse all blackListed structures into resourceLocations
+        this.registry = server.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        this.structureBlacklist = new HashSet<>();
+        for(String blacklistedStruct : activeConfig.naturalStructureSpawnsBlacklist) {
+            ResourceLocation loc = getStructure(registry, blacklistedStruct);
+            if(loc != null) {
+                structureBlacklist.add(loc);
+            } else {
+                LoggerProject.logError(CLASS_ID + "015", "Failed to blacklisted structure '" + blacklistedStruct);
+            }
+        }
+
 
         // Resolve all string ids to registry Holders and prune invalid entries
         initStructures(server);
@@ -246,5 +260,16 @@ public class ModConfig {
         public boolean isSkipStructure(Structure s) {
             if(s==null) return false;
             return s.equals(SKIP_STRUCT);
+        }
+
+
+//implement isBlacklisted against loc and structure
+    public boolean isBlacklisted(ResourceLocation loc) {
+        if(loc==null) return false;
+        return structureBlacklist.contains(loc);
+    }
+
+        public boolean isBlacklisted(Structure s) {
+            return  isBlacklisted(loc(s));
         }
 }

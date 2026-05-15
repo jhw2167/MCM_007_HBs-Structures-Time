@@ -196,7 +196,11 @@ public class StructureConceptManager {
     }
 
     public void setManagerStage(int stage) {
-        this.globalStage = stage;
+        if(stage < 1) return;
+        var ketSet = new HashSet<>(conceptStages.keySet());
+        for(StructureConcept concept : ketSet) {
+            conceptStages.put(concept, stage);
+        }
     }
 
     public static void setGlobalStage(Level level, int stage) {
@@ -242,7 +246,9 @@ public class StructureConceptManager {
 
         for(ManagedStructureConceptChunk chunk : managedChunks.values()) {
             if(!conceptStages.containsKey(chunk.getStructureConcept())) continue;
-            chunk.queueStructureUpgrade(conceptStages.get(chunk.getStructureConcept()));
+            int stage = conceptStages.get(chunk.getStructureConcept());
+            if(chunk.getStructureConcept().getMaxStage() < stage) continue;
+            chunk.queueStructureUpgrade(stage);
         }
     }
 
