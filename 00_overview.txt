@@ -348,3 +348,26 @@ private void handleStructureUpgradeOnTick() {
             break;
     }
 }
+
+
+Command Overview:
+
+consider CommandList.java in 007_HBs-Structures-Time:
+
+```
+package com.holybuckets.structures.command;
+```
+
+
+Lets add some new commands, we don't have support for all of them yet, but we can block out some space:
+
+1. hbStructures getDetails <chunkPos>  - gets details for the structure in the specified chunk. Returns an error if no concept is found in the chunk. Argument is optional, if null, we will search for the nearest structure. Not implemented
+2. hbStructures config <structureConceptId> <doShowAllStages> - prints the structureConcept config and optionally prints data on all stages in the concept
+3. hbStructures stageConfig <structureConceptId> <stageNo> shows all details for any numbered stage in any concept. If user fails to provide a stage number, return the total number of stages
+4. hbStructures locate <structureConceptId> - returns the location of the structure concept from list of existing structures. If not found, use internal locate command to find structure of the matching origin type.
+5. hbStructures stopUpgrades <chunkPos> - stops the structure at the specified chunk from upgrading unless forced by commands. If argument is not provided, applies it to nearest structure
+6. hbStructures forceUpgrade <chunkPos> <boolean, doUpgrade> - forces a structure to upgrade, enables further upgrades as well. Usage without the boolean set to true specifies which structure will be upgraded and reminds the player that the area will be completely cleared, but does not force the upgrade.
+7. hbStructures resumeUpgrades <chunkPos> - allows structure to continue upgrading, but doesnt force it to do so yet
+
+
+Block out space for each of these as static classes and their own commands in CommandList.java but have them just return default messages at this point.

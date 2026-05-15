@@ -11,7 +11,6 @@ import com.holybuckets.foundation.modelInterface.IMangedChunkData;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.StructuresOverTimeMain;
 import com.holybuckets.structures.config.ModConfig;
-import com.holybuckets.structures.config.StructuresTimeConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
 import com.holybuckets.structures.mixin.ChunkAccessAccessor;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
@@ -23,7 +22,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.ChunkPos;
@@ -93,7 +91,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private List<Entity> entities; //to be used for copying mobs
 
     private int countTotalWakeups;
-    private boolean upgradeRejected;
+    private int upgradeRejectedStatus;
 
     /** Constructors **/
 
@@ -114,7 +112,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.lootPositions = new ArrayList<>();
         this.entities = new ArrayList<>();
 
-        this.upgradeRejected = false;
+        this.upgradeRejectedStatus = -1;
     }
 
     public ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp, StructureSetStartContext ctx, int stage) {
@@ -238,6 +236,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      **/
     public static ManagedStructureConceptChunk getInstance(LevelAccessor levelAcc, String id) {
         ChunkPos cp = ChunkUtil.getChunkPos(id);
+        if(StructureConceptManager.get(levelAcc) == null) return DEFAULT;
         return StructureConceptManager.get(levelAcc).getManagedChunks().getOrDefault(cp, DEFAULT);
     }
 
@@ -316,18 +315,26 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         setInstance(level, id, this);
     }
 
+    /**
+     * If for any reason a structure upgrade was rejected,
+     * reset the rejection status and allow the structure to attempt to upgrade again.
+     */
+    public void resetUpgradeRejectedStatus() {
+        this.upgradeRejectedStatus = -1;
+    }
 
     /** Enqueues a structure upgrade for next tick, giving a chance for a warning or to cancel **/
     private int nextStageQueued = -1;
     public void queueStructureUpgrade(int nextStage)
     {
         if(nextStage== stage) return;
-        if(upgradeRejected) return;
+        if(upgradeRejectedStatus>-1) return;
         if( testRejectStructureUpgrade() ) return;
 
-        warnPlayersOfStructureUpgrade();
         if(nextStage == nextStageQueued) {
-            triggerStructureUpgrade(nextStage);
+            triggerStructureUpgrade(nextStage, false);
+        } else {
+            warnPlayersOfStructureUpgrade();
         }
         this.nextStageQueued = nextStage;
     }
@@ -336,9 +343,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      * Places the structure for the given stage using the stored StructureStart context.
      * Mirrors the structure placement loop in ChunkGenerator::applyBiomeDecoration.
      */
-    public void triggerStructureUpgrade(int newStage)
+    public void triggerStructureUpgrade(int newStage, boolean force)
     {
-        if(testRejectStructureUpgrade()) return;
+        if(force) {}
+        else if(testRejectStructureUpgrade()) return;
 
         //1. Check if Chunk is available
         if (newStage < 1 || newStage == this.stage) {
@@ -558,8 +566,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             testStructureForRejection();
             return false;
         } catch (StructureUpgradeRejectionException e) {
-            upgradeRejected = true;
-            List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInBlockRange(chunk.getPos().getWorldPosition(), 34);
+            List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(chunk, 34);
 
             nearbyPlayers.forEach(p -> Messager.getInstance().sendChat(p, e.getMessage()));
             LoggerProject.logInfo(CLASS_ID + "003", "Structure upgrade rejected for chunk " + id + ": " + e.getMessage());
@@ -634,16 +641,25 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         switch (rejectCase)
         {
             case 1:
+            upgradeRejectedStatus = 1;
               msg = baseMessage + "an existing player spawn is set in structure.";
               throw new StructureUpgradeRejectionException(msg);
             case 2:
+                upgradeRejectedStatus = 2;
               int chestCount = structureConcept.getStopUpgradeOnTotalChestCount();
               msg = baseMessage + " chest count exceeded. There are more than "+ chestCount + " chests so the player may be using it as a base.";
               throw new StructureUpgradeRejectionException(msg);
             case 3:
+                upgradeRejectedStatus = 3;
               msg = baseMessage + " player has spent many days in structure. And may be using it as a base.";
               throw new StructureUpgradeRejectionException(msg);
+
+            case 4:
+              upgradeRejectedStatus = 4;
+              msg = baseMessage + " command disabled structure upgrade.";
+              throw new StructureUpgradeRejectionException(msg);
             default:
+                upgradeRejectedStatus = 0;
                 msg = baseMessage + " no structure data found.";
                 throw new StructureUpgradeRejectionException(msg);
         }
@@ -658,10 +674,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private void warnPlayersOfStructureUpgrade() {
         if (structureConcept == null) return;
         if(StructuresOverTimeMain.CONFIG.enableStructureUpgradeWarning) {
-            List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInBlockRange(chunk.getPos().getWorldPosition(), 34);
+            List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(chunk, 34);
             String strDetails = getStructureDetails();
             nearbyPlayers.forEach(p -> Messager.getInstance().sendChat(p,
-                "Below structure will be upgraded soon, use commands to stop upgrade: "
+                "Nearby structure will be upgraded soon, use commands to stop upgrade:\n"
                  + strDetails));
         }
     }
@@ -673,7 +689,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if (structureConcept == null) return "No structure concept in this chunk.";
 
         return String.format("Structure Concept Id: %s\nPosition: %s\nCurrent Stage: %d",
-            structureConcept.getStructureConceptId(), pos.toString(), stage);
+            structureConcept.getStructureConceptId(), pos.getWorldPosition(), stage);
     }
 
     /**
@@ -699,7 +715,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             tag.putInt("stage", this.stage);
         }
 
-        tag.putBoolean("rejectedUpgrade", this.upgradeRejected);
+        tag.putInt("rejectedUpgrade", this.upgradeRejectedStatus);
 
         tag.putString("structure", structureConcept.getStructureConceptId());
 
@@ -742,7 +758,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             this.structureConcept = MOD_CONFIG.getStructureConcept(conceptId);
         }
 
-        this.upgradeRejected =tag.contains("rejectedUpgrade") && tag.getBoolean("rejectedUpgrade");
+        this.upgradeRejectedStatus = -1;
+        if(tag.contains("rejectedUpgrade")) {
+            this.upgradeRejectedStatus = tag.getInt("rejectedUpgrade");
+        }
 
         // Deserialize structure starts using vanilla StructureStart.loadStaticStart
         if (tag.contains("structureStarts")) {

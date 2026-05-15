@@ -60,7 +60,6 @@ public class StructuresOverTimeMain {
 
     private void onRegisterConfig(ConfigLoadedEvent event) {
         CONFIG = Balm.getConfig().getActiveConfig(StructuresTimeConfig.class);
-        StructureConceptJsonConfig.initDefaultConfig();
     }
 
     private void onServerStarting(ServerStartingEvent e) {

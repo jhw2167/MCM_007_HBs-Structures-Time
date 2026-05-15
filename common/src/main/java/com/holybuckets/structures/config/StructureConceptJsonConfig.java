@@ -20,9 +20,6 @@ public class StructureConceptJsonConfig implements IStringSerializable {
 
 
 
-    /** Pre-built default config instance, used as the fallback. */
-    public static StructureConceptJsonConfig DEFAULT_CONFIG;
-
 
     /** Ordered map preserving insertion order from the JSON array. */
     private final Map<String, StructureConcept> conceptMap;
@@ -104,11 +101,8 @@ public class StructureConceptJsonConfig implements IStringSerializable {
 
 
     //** DEFAULTS **//
-    public static void initDefaultConfig() {
-        DEFAULT_CONFIG = buildDefaultConfig();
-    }
 
-    private static StructureConceptJsonConfig buildDefaultConfig() {
+    public static StructureConceptJsonConfig buildDefaultConfig() {
         List<StructureConcept> concepts = new ArrayList<>();
 
         // village: witch hut → village → (empty) → pillager outpost

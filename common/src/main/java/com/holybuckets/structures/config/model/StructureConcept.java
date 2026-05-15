@@ -3,8 +3,12 @@ package com.holybuckets.structures.config.model;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.holybuckets.foundation.HBUtil;
+import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.StructuresOverTimeMain;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -25,6 +29,7 @@ import java.util.List;
  */
 public class StructureConcept {
 
+    private static final String CLASS_ID = "005";
 
     private final String structureConceptId;
     private final String sourceStructureId;
@@ -197,6 +202,58 @@ public class StructureConcept {
 
     public int getStopUpgradeOnDaysSpentInStructure() {
         return stopUpgradeOnDaysSpentInStructure;
+    }
+
+    @Nullable
+    private Object getStructureUpgradeTrigger(int stageNo) {
+        StructureConceptStage stage = getStage(stageNo);
+        if (stage == null) return null;
+        return parseTrigger( stage.upgradeStructureTrigger );
+    }
+
+
+    public Object parseTrigger(String triggerString)
+    {
+        try {
+            return Integer.parseInt(triggerString);
+        } catch (NumberFormatException e) {}
+
+        Item item = HBUtil.ItemUtil.itemNameToItem(triggerString);
+        if (item != null) return item;
+
+        Level level = HBUtil.LevelUtil.toLevel(HBUtil.LevelUtil.LevelNameSpace.SERVER, triggerString);
+        if (level != null) return level;
+
+        String defTrigger = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
+        if(defTrigger.equals(triggerString) ) {
+            String msg = String.format("Default trigger '%s' is invalid. " + CRASHOUT, defTrigger);
+            LoggerProject.logError("005002", msg);
+            throw new IllegalArgumentException(msg);
+        } else {
+            LoggerProject.logError("005001", String.format(INVALID_TRIGGER, triggerString));
+            return parseTrigger(defTrigger);
+        }
+    }
+    private static final String INVALID_TRIGGER = "Trigger '%s' is neither an integer (days), an item, or a dimension name. Reverting to default structure upgrade trigger.";
+    private static final String CRASHOUT = "The default structure upgrade trigger is not a valid integer, item or dimension. Please edit hbs_structures-common to set a valid default trigger.";
+
+    @Nullable
+    public Item getStructureUpgradeItem(int stage) {
+        Object trigger = getStructureUpgradeTrigger(stage);
+        return (trigger instanceof Item) ? (Item) trigger : null;
+    }
+
+    @Nullable
+    public Level getStructureUpgradeDimension(int stage) {
+        Object trigger = getStructureUpgradeTrigger(stage);
+        return (trigger instanceof Level) ? (Level) trigger : null;
+    }
+
+    @Nullable
+    public Integer getStructureUpgradeDays(int stage) {
+        if(this.getStageCount()<stage) return null;
+        Object trigger = getStructureUpgradeTrigger(stage);
+        return (trigger instanceof Integer) ? (Integer) trigger : null;
     }
 
     @Nullable

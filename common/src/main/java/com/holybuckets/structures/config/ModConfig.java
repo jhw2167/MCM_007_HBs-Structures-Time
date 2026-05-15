@@ -46,7 +46,6 @@ public class ModConfig {
     }
 
     private ModConfig() {
-        this.structureConceptConfig = StructureConceptJsonConfig.DEFAULT_CONFIG;
         this.activeStructureConcepts = new HashMap<>();
     }
 
@@ -174,7 +173,7 @@ public class ModConfig {
         String json = HBUtil.FileIO.loadJsonConfigs(
             configFile,
             defaultConfigFile,
-            StructureConceptJsonConfig.DEFAULT_CONFIG
+            StructureConceptJsonConfig.buildDefaultConfig()
         );
 
         this.structureConceptConfig = new StructureConceptJsonConfig(json);
@@ -188,7 +187,6 @@ public class ModConfig {
     }
 
     private void onServerStopped() {
-        this.structureConceptConfig = StructureConceptJsonConfig.DEFAULT_CONFIG;
         INSTANCE = null;
     }
 
