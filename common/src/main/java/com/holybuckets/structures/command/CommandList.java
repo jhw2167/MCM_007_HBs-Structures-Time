@@ -406,8 +406,8 @@ public class CommandList {
         private static LiteralArgumentBuilder<CommandSourceStack> withChunkPos() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("forceUpgrade")
-                    .then(Commands.argument("x", IntegerArgumentType.integer())
-                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                    .then(Commands.argument("chunkX", IntegerArgumentType.integer())
+                        .then(Commands.argument("chunkZ", IntegerArgumentType.integer())
                             .executes(context -> {
                                 int x = IntegerArgumentType.getInteger(context, "x");
                                 int z = IntegerArgumentType.getInteger(context, "z");
@@ -421,8 +421,8 @@ public class CommandList {
         private static LiteralArgumentBuilder<CommandSourceStack> withChunkPosAndConfirm() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("forceUpgrade")
-                    .then(Commands.argument("x", IntegerArgumentType.integer())
-                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                    .then(Commands.argument("chunkX", IntegerArgumentType.integer())
+                        .then(Commands.argument("chunkZ", IntegerArgumentType.integer())
                             .then(Commands.literal("confirm")
                                 .executes(context -> {
                                     int x = IntegerArgumentType.getInteger(context, "x");

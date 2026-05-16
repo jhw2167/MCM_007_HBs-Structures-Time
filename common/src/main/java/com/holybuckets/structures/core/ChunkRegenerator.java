@@ -280,6 +280,14 @@ public class ChunkRegenerator {
 
         }
 
+        //get all block entities in protochunk and copy them to the live chunk
+        for (BlockPos bePos : source.getBlockEntitiesPos()) {
+            if (!region.isInside(bePos)) continue;
+            BlockEntity protoBe = source.getBlockEntity(bePos);
+            if (protoBe == null) continue;
+            target.setBlockEntity(protoBe);
+        }
+
         // Also flag sky + block light as needing a full re-check for this chunk
         level.getChunkSource().getLightEngine().propagateLightSources(target.getPos());
     }

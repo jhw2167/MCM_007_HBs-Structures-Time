@@ -525,7 +525,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                         List<StructureTemplate.StructureEntityInfo> ents = ((StructureTemplateAccessor) temp).getEntityInfoList();
                         for(StructureTemplate.StructureEntityInfo info : ents) {
                             EntityType.create(info.nbt, level).ifPresent(entity -> {
-                                entity.moveTo(info.pos);
+                                entity.moveTo(piece.getLocatorPosition().offset(info.blockPos), 0, 0);
                                 if (entity instanceof Mob mob) {
                                     mob.finalizeSpawn(level, level.getCurrentDifficultyAt(info.blockPos), MobSpawnType.STRUCTURE, null, null);
                                 }
@@ -728,8 +728,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public String getStructureDetails() {
         if (structureConcept == null) return "No structure concept in this chunk.";
 
-        return String.format("Structure Concept Id: %s\nPosition: %s\nCurrent Stage: %d",
-            structureConcept.getStructureConceptId(), pos.getWorldPosition(), stage);
+        return String.format("Structure Concept Id: %s\nPosition: %s, Chunk: %s\nCurrent Stage: %d",
+            structureConcept.getStructureConceptId(), pos.getWorldPosition(), pos.toString(), stage);
     }
 
     /**

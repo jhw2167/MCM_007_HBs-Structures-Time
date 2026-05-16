@@ -128,25 +128,12 @@ public class StructureConceptManager {
     //** EVENT HANDLERS **//
 
     private void handleSetStartForStructure(StructureSetStartContext ctx) {
-        String id = getStructureId(ctx.structure).toString();
-        //logStructurePlacement("setStartForStructure", id);
-
         if( MOD_CONFIG.isActiveStructure(getStructureId(ctx.structure)) ) {
             registerManagedChunk(ctx);
         }
-    }
-
-    private void handleTryGenerateStructure(StructureGenerateContext ctx) {
-        String id = getStructureId(ctx.structureEntry.structure().value()).toString();
-        //logStructurePlacement("tryGenerateStructure", id);
-    }
-
-    private void handleStructureLoad(ChunkPos chunkPos, Map<Structure, StructureStart> structureStarts) {
-       String chunkId = ChunkUtil.getId(chunkPos);
-       for(Structure s : structureStarts.keySet()) {
-           String structureId = getStructureId(s).toString();
-           //LoggerProject.logDebug("011031", "Structure loaded: " + structureId + " in chunk: " + chunkId);
-       }
+        if( MOD_CONFIG.isBlacklisted(ctx.structure) )        {
+            ctx.structureAccess.setStartForStructure(ctx.structure, null);
+        }
     }
 
     private void handleChunkLoad(ChunkLoadingEvent.Load event) {
@@ -498,7 +485,7 @@ public class StructureConceptManager {
         for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
             LevelAccessor levelAccessor = entry.getKey();
             if (levelAccessor instanceof ServerLevel serverLevel) {
-                entry.getValue().handleTryGenerateStructure(ctx);
+                //entry.getValue().handleTryGenerateStructure(ctx);
                 return;
             }
         }
@@ -513,7 +500,7 @@ public class StructureConceptManager {
 
     public static void onStructureLoad(ChunkPos chunkPos, Map<Structure, StructureStart> structureStarts) {
         for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
-                entry.getValue().handleStructureLoad(chunkPos, structureStarts);
+                //entry.getValue().handleStructureLoad(chunkPos, structureStarts);
         }
     }
 
