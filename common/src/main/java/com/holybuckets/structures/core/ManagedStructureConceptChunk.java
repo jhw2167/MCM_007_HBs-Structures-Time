@@ -13,6 +13,9 @@ import com.holybuckets.structures.StructuresOverTimeMain;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
 import com.holybuckets.structures.mixin.ChunkAccessAccessor;
+import com.holybuckets.structures.mixin.SinglePoolElementAccessor;
+import com.holybuckets.structures.mixin.StructureTemplateAccessor;
+import com.holybuckets.structures.mixin.TemplateStructurePieceAccessor;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
@@ -21,18 +24,19 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.levelgen.RandomState;
-import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.levelgen.structure.*;
 import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
 import net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext;
 import net.minecraft.world.level.levelgen.structure.pieces.StructurePiecesBuilder;
+import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 
 import java.util.*;
@@ -345,7 +349,9 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      */
     public void triggerStructureUpgrade(int newStage, boolean force)
     {
-        if(force) {}
+        if(force) {
+            this.upgradeRejectedStatus = -1;
+        }
         else if(testRejectStructureUpgrade()) return;
 
         //1. Check if Chunk is available
@@ -495,7 +501,41 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 if(!structureConcept.getStage(stage).isIncludeEntities()) {
                     //nothing
                 } else {
-                    entities.forEach(level::addFreshEntity);
+                    StructureStart start = structureStarts.get(currentStructure);
+                    List<StructurePiece> pieces = start.getPieces();
+                    for(StructurePiece piece : pieces)
+                    {
+                        StructureTemplate temp;
+                        StructurePlaceSettings placeSettings;
+                        if(piece instanceof TemplateStructurePiece tsp) {
+                            temp = ((TemplateStructurePieceAccessor) piece).getTemplate();
+                            placeSettings = tsp.placeSettings();
+                        } else if(piece instanceof PoolElementStructurePiece pesp) {
+                            if(pesp.getElement() instanceof SinglePoolElement spe) {
+                                StructureTemplateManager manager = level.getServer().getStructureManager();
+                                temp = ((SinglePoolElementAccessor) spe).invokeGetTemplate(manager);
+                                placeSettings = ((SinglePoolElementAccessor) spe).invokeGetSettings(
+                                piece.getRotation(), piece.getBoundingBox(), true );
+                            }
+                                else continue;
+                        } else {
+                            continue;
+                        }
+                        if(temp==null || placeSettings==null ) continue;
+                        List<StructureTemplate.StructureEntityInfo> ents = ((StructureTemplateAccessor) temp).getEntityInfoList();
+                        for(StructureTemplate.StructureEntityInfo info : ents) {
+                            EntityType.create(info.nbt, level).ifPresent(entity -> {
+                                entity.moveTo(info.pos);
+                                if (entity instanceof Mob mob) {
+                                    mob.finalizeSpawn(level, level.getCurrentDifficultyAt(info.blockPos), MobSpawnType.STRUCTURE, null, null);
+                                }
+
+                                level.addFreshEntityWithPassengers(entity);
+                            });
+
+                        }
+
+                    }
                 }
                 phase = UpgradePhase.DONE;
                 break;

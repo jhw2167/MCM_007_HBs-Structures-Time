@@ -67,11 +67,11 @@ public class StructureConceptManager {
 
 
     //** STATICS
-    private static Map<LevelAccessor, StructureConceptManager> MANAGERS = new HashMap<>();
-    private static ModConfig MOD_CONFIG;
-    private static GeneralConfig GENERAL_CONFIG;
-    private static Map<String, BlockPos> playerSpawnPos = new HashMap<>();
-    private static Map<StructureConcept, Integer> conceptStages = new HashMap<>();
+    static Map<LevelAccessor, StructureConceptManager> MANAGERS = new HashMap<>();
+    static ModConfig MOD_CONFIG;
+    static GeneralConfig GENERAL_CONFIG;
+    static Map<String, BlockPos> playerSpawnPos = new HashMap<>();
+    static Map<StructureConcept, Integer> conceptStages = new HashMap<>();
 
 
     //** CONSTRUCTORS
@@ -208,6 +208,7 @@ public class StructureConceptManager {
         if (manager != null) {
             manager.setManagerStage(stage);
         }
+        globalStage = stage;
     }
 
 
@@ -408,8 +409,8 @@ public class StructureConceptManager {
         reg.registerOnLevelLoad(StructureConceptManager::onLevelLoad, EventPriority.High);
         reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
         //reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
-        //reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::onDailyTickEvent);
-        reg.registerOnServerTick(TickType.ON_6000_TICKS, StructureConceptManager::on6000Ticks);
+        reg.registerOnServerTick(TickType.ON_120_TICKS, StructureConceptManager::on6000Ticks);
+        //reg.registerOnServerTick(TickType.ON_6000_TICKS, StructureConceptManager::on6000Ticks);
         reg.registerOnServerTick(TickType.ON_SINGLE_TICK, StructureConceptManager::onServerTick);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
         reg.registerOnDailyTick(GeneralConfig.OVERWORLD_LOC, StructureConceptManager::onDailyTick);

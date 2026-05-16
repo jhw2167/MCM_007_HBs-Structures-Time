@@ -7,8 +7,12 @@
     "mixins": [
         "ChunkAccessAccessor",
         "ChunkAccessMixin",
+        "PoolElementStructurePieceAccessor",
+        "SinglePoolElementAccessor",
         "StructureCheckMixin",
-        "StructureManagerMixin"
+        "StructureManagerMixin",
+        "StructureTemplateAccessor",
+        "TemplateStructurePieceAccessor"
     ],
     "client": [
     ],

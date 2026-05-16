@@ -7,6 +7,8 @@ import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.CommandRegistry;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.core.ChunkRegenerator;
+import com.holybuckets.structures.core.ManagedStructureConceptChunk;
+import com.holybuckets.structures.core.StructureConceptAPI;
 import com.holybuckets.structures.core.StructureConceptManager;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -49,6 +51,7 @@ public class CommandList {
         CommandRegistry.register(Locate::withConceptId);
         CommandRegistry.register(StopUpgrades::noArgs);
         CommandRegistry.register(StopUpgrades::withChunkPos);
+        CommandRegistry.register(ForceUpgrade::noArgs);
         CommandRegistry.register(ForceUpgrade::withChunkPos);
         CommandRegistry.register(ForceUpgrade::withChunkPosAndConfirm);
         CommandRegistry.register(ResumeUpgrades::noArgs);
@@ -197,14 +200,9 @@ public class CommandList {
     }
     //END COMMAND
 
-// ============================================================
-// ADD to register():
-// ============================================================
-
     //4. Get Details
     private static class GetDetails
     {
-        // No args — find nearest structure to player
         private static LiteralArgumentBuilder<CommandSourceStack> noArgs() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("getDetails")
@@ -212,22 +210,43 @@ public class CommandList {
                 );
         }
 
-        // With chunkPos string like "12,34"
         private static LiteralArgumentBuilder<CommandSourceStack> withChunkPos() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("getDetails")
-                    .then(Commands.argument("chunkPos", StringArgumentType.string())
-                        .executes(context -> {
-                            String chunkPos = StringArgumentType.getString(context, "chunkPos");
-                            return execute(context.getSource(), chunkPos);
-                        })
+                    .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                            .executes(context -> {
+                                int x = IntegerArgumentType.getInteger(context, "x");
+                                int z = IntegerArgumentType.getInteger(context, "z");
+                                return execute(context.getSource(), new ChunkPos(x, z));
+                            })
+                        )
                     )
                 );
         }
 
-        private static int execute(CommandSourceStack source, String chunkPos) {
-            // chunkPos null => search for nearest structure
-            source.sendSuccess(() -> Component.literal("[getDetails] Not yet implemented. chunkPos=" + chunkPos), false);
+        private static int execute(CommandSourceStack source, ChunkPos chunkPos) {
+            StructureConceptAPI api = new StructureConceptAPI(source.getLevel());
+            ManagedStructureConceptChunk managedChunk;
+
+            if (chunkPos == null) {
+                ServerPlayer player = source.getPlayer();
+                if (player == null) {
+                    source.sendFailure(Component.literal("This command must be run by a player."));
+                    return 0;
+                }
+                managedChunk = api.getNearestStructureChunk(player.blockPosition());
+            } else {
+                managedChunk = api.getStructureAtChunk(chunkPos);
+            }
+
+            if (managedChunk == null) {
+                source.sendFailure(Component.literal("No managed structure found."));
+                return 0;
+            }
+
+            String details = managedChunk.getStructureDetails();
+            source.sendSuccess(() -> Component.literal(details), false);
             return 1;
         }
     }
@@ -343,7 +362,6 @@ public class CommandList {
     //8. Stop Upgrades
     private static class StopUpgrades
     {
-        // No args — applies to nearest structure
         private static LiteralArgumentBuilder<CommandSourceStack> noArgs() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("stopUpgrades")
@@ -354,17 +372,19 @@ public class CommandList {
         private static LiteralArgumentBuilder<CommandSourceStack> withChunkPos() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("stopUpgrades")
-                    .then(Commands.argument("chunkPos", StringArgumentType.string())
-                        .executes(context -> {
-                            String chunkPos = StringArgumentType.getString(context, "chunkPos");
-                            return execute(context.getSource(), chunkPos);
-                        })
+                    .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                            .executes(context -> {
+                                int x = IntegerArgumentType.getInteger(context, "x");
+                                int z = IntegerArgumentType.getInteger(context, "z");
+                                return execute(context.getSource(), new ChunkPos(x, z));
+                            })
+                        )
                     )
                 );
         }
 
-        private static int execute(CommandSourceStack source, String chunkPos) {
-            // chunkPos null => nearest structure
+        private static int execute(CommandSourceStack source, ChunkPos chunkPos) {
             source.sendSuccess(() -> Component.literal(
                 "[stopUpgrades] Not yet implemented. chunkPos=" + chunkPos), false);
             return 1;
@@ -376,43 +396,76 @@ public class CommandList {
     //9. Force Upgrade
     private static class ForceUpgrade
     {
-        // chunkPos only — warns player but does not upgrade
-        private static LiteralArgumentBuilder<CommandSourceStack> withChunkPos() {
+        private static LiteralArgumentBuilder<CommandSourceStack> noArgs() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("forceUpgrade")
-                    .then(Commands.argument("chunkPos", StringArgumentType.string())
-                        .executes(context -> {
-                            String chunkPos = StringArgumentType.getString(context, "chunkPos");
-                            return execute(context.getSource(), chunkPos, false);
-                        })
-                    )
+                    .executes(context -> execute(context.getSource(), null, false))
                 );
         }
 
-        // chunkPos + boolean confirm — actually forces the upgrade
-        private static LiteralArgumentBuilder<CommandSourceStack> withChunkPosAndConfirm() {
+        private static LiteralArgumentBuilder<CommandSourceStack> withChunkPos() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("forceUpgrade")
-                    .then(Commands.argument("chunkPos", StringArgumentType.string())
-                        .then(Commands.argument("doUpgrade", StringArgumentType.string())
+                    .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
                             .executes(context -> {
-                                String chunkPos = StringArgumentType.getString(context, "chunkPos");
-                                String confirm = StringArgumentType.getString(context, "doUpgrade");
-                                boolean doUpgrade = confirm.equalsIgnoreCase("true");
-                                return execute(context.getSource(), chunkPos, doUpgrade);
+                                int x = IntegerArgumentType.getInteger(context, "x");
+                                int z = IntegerArgumentType.getInteger(context, "z");
+                                return execute(context.getSource(), new ChunkPos(x, z), false);
                             })
                         )
                     )
                 );
         }
 
-        private static int execute(CommandSourceStack source, String chunkPos, boolean doUpgrade) {
-            if (!doUpgrade) {
-                source.sendSuccess(() -> Component.literal(
-                    "[forceUpgrade] Structure at " + chunkPos + " selected. WARNING: area will be completely cleared. Run with 'true' to confirm."), false);
+        private static LiteralArgumentBuilder<CommandSourceStack> withChunkPosAndConfirm() {
+            return Commands.literal(PREFIX)
+                .then(Commands.literal("forceUpgrade")
+                    .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                            .then(Commands.literal("confirm")
+                                .executes(context -> {
+                                    int x = IntegerArgumentType.getInteger(context, "x");
+                                    int z = IntegerArgumentType.getInteger(context, "z");
+                                    return execute(context.getSource(), new ChunkPos(x, z), true);
+                                })
+                            )
+                        )
+                    )
+                );
+        }
+
+        private static int execute(CommandSourceStack source, ChunkPos chunkPos, boolean doUpgrade) {
+            StructureConceptAPI api = new StructureConceptAPI(source.getLevel());
+            ManagedStructureConceptChunk managedChunk;
+
+            if (chunkPos == null) {
+                ServerPlayer player = source.getPlayer();
+                if (player == null) {
+                    source.sendFailure(Component.literal("This command must be run by a player."));
+                    return 0;
+                }
+                managedChunk = api.getNearestStructureChunk(player.blockPosition());
             } else {
-                source.sendSuccess(() -> Component.literal(
-                    "[forceUpgrade] Not yet implemented. chunkPos=" + chunkPos + " doUpgrade=true"), false);
+                managedChunk = api.getStructureAtChunk(chunkPos);
+            }
+
+            if (managedChunk == null) {
+                source.sendFailure(Component.literal("No structure found at specified location."));
+                return 0;
+            }
+
+            ChunkPos pos = managedChunk.getChunkPos();
+            if (doUpgrade) {
+                api.forceUpgradeStructure(pos);
+                source.sendSuccess(() -> Component.literal("Structure at " + pos + " upgrade processing..."), true);
+            } else {
+                String msg = String.format(
+                    "This will upgrade the structure at chunk %s from stage %d to stage %d. " +
+                    "All blocks in the area will be overwritten. Run again with 'confirm' to proceed.",
+                    pos, managedChunk.getstage(), managedChunk.getstage() + 1
+                );
+                source.sendSuccess(() -> Component.literal(msg), false);
             }
             return 1;
         }
@@ -423,7 +476,6 @@ public class CommandList {
     //10. Resume Upgrades
     private static class ResumeUpgrades
     {
-        // No args — applies to nearest structure
         private static LiteralArgumentBuilder<CommandSourceStack> noArgs() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("resumeUpgrades")
@@ -434,17 +486,19 @@ public class CommandList {
         private static LiteralArgumentBuilder<CommandSourceStack> withChunkPos() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("resumeUpgrades")
-                    .then(Commands.argument("chunkPos", StringArgumentType.string())
-                        .executes(context -> {
-                            String chunkPos = StringArgumentType.getString(context, "chunkPos");
-                            return execute(context.getSource(), chunkPos);
-                        })
+                    .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                            .executes(context -> {
+                                int x = IntegerArgumentType.getInteger(context, "x");
+                                int z = IntegerArgumentType.getInteger(context, "z");
+                                return execute(context.getSource(), new ChunkPos(x, z));
+                            })
+                        )
                     )
                 );
         }
 
-        private static int execute(CommandSourceStack source, String chunkPos) {
-            // chunkPos null => nearest structure
+        private static int execute(CommandSourceStack source, ChunkPos chunkPos) {
             source.sendSuccess(() -> Component.literal(
                 "[resumeUpgrades] Not yet implemented. chunkPos=" + chunkPos), false);
             return 1;

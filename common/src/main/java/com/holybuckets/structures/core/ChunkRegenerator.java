@@ -181,11 +181,13 @@ public class ChunkRegenerator {
                 centerChunk.setStatus(ChunkStatus.FEATURES);
             }
 
-
+            /*
             entities.addAll( region.getEntities(null, new AABB(
                 structureArea.minX(), structureArea.minY(), structureArea.minZ(),
                 structureArea.maxX(), structureArea.maxY(), structureArea.maxZ()
             )) );
+            */
+
 
             return true;
         } catch (Exception e) {
