@@ -1,5 +1,6 @@
 package com.holybuckets.structures.core;
 
+import com.google.gson.JsonObject;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.structures.config.model.StructureConcept;
 import net.minecraft.core.BlockPos;
@@ -51,7 +52,7 @@ public class StructureConceptAPI {
         if(managedChunk == null) return false;
         int newStage = managedChunk.getstage()+1;
         var concept = managedChunk.getStructureConcept();
-        StructureConceptManager.conceptStages.put(concept, newStage);
+        StructureConceptManager.pendingStageUpgrades.put(concept, newStage);
         manager.getManagedChunk(chunkPos).triggerStructureUpgrade(newStage, true);
         return true;
     }
@@ -65,4 +66,17 @@ public class StructureConceptAPI {
         return true;
     }
 
+    public JsonObject getConfig(String conceptId, boolean showAllStages) {
+        StructureConcept concept = StructureConceptManager.MOD_CONFIG.getStructureConcept(conceptId);
+
+        JsonObject json = new JsonObject();
+        //Add conceptId, stage, and all config values to json
+        json.addProperty("conceptId", conceptId);
+        json.addProperty("currentStage", StructureConceptManager.conceptStages.get(concept));
+
+        json.addProperty("totalStages", concept.getStageCount());
+        json.addProperty("sourceStructureId", concept.getSourceStructureId());
+
+        return json;
+    }
 }

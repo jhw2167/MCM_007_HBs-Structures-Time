@@ -5,6 +5,7 @@ import net.blay09.mods.balm.api.config.reflection.Comment;
 import net.blay09.mods.balm.api.config.reflection.Config;
 import net.blay09.mods.balm.api.config.reflection.NestedType;
 
+import java.util.List;
 import java.util.Set;
 
 
@@ -21,7 +22,7 @@ public class StructuresTimeConfig {
 
     @Comment("Prevent certain structures from spawning normally in the world, they will only spawn via structure upgrades. You should not blacklist the ORIGIN STRUCTURES for your structure concepts")
     @NestedType(String.class)
-    Set<String> naturalStructureSpawnsBlacklist = Set.of(
+    List<String> naturalStructureSpawnsBlacklist = List.of(
         "minecraft:igloo",
         "nova_structures:tavern_oak",
         "towns_and_towers:village_meadow"

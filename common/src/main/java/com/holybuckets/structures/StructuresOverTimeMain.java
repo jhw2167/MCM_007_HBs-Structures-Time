@@ -56,12 +56,11 @@ public class StructuresOverTimeMain {
 
         //register local events
         registrar.registerOnBeforeServerStarted(this::onServerStarting, EventPriority.Highest);
-        Balm.getEvents().onEvent(ConfigLoadedEvent.class, this::onRegisterConfig);
         Balm.getEvents().onEvent(ConfigReloadedEvent.class, this::onRegisterConfig);
-
     }
 
     private void onRegisterConfig(Object event) {
+        if(Balm.getConfig()!=null)
         CONFIG = Balm.getConfig().getActiveConfig(StructuresTimeConfig.class);
     }
 

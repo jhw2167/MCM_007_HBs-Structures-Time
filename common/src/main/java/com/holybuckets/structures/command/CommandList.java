@@ -2,6 +2,7 @@ package com.holybuckets.structures.command;
 
 //Project imports
 
+import com.google.gson.JsonObject;
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.CommandRegistry;
@@ -10,6 +11,7 @@ import com.holybuckets.structures.core.ChunkRegenerator;
 import com.holybuckets.structures.core.ManagedStructureConceptChunk;
 import com.holybuckets.structures.core.StructureConceptAPI;
 import com.holybuckets.structures.core.StructureConceptManager;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -37,9 +39,6 @@ public class CommandList {
         //CommandRegistry.register(LocateClusters::noArgs);
         //CommandRegistry.register(LocateClusters::limitCount);
         //CommandRegistry.register(LocateClusters::limitCountSpecifyBlockType);
-        CommandRegistry.register(SetGlobalStage::withStageArg);
-        CommandRegistry.register(RegenerateChunk::noArgs);
-
         CommandRegistry.register(SetGlobalStage::withStageArg);
         CommandRegistry.register(RegenerateChunk::noArgs);
         CommandRegistry.register(GetDetails::noArgs);
@@ -285,8 +284,20 @@ public class CommandList {
         }
 
         private static int execute(CommandSourceStack source, String conceptId, boolean showAllStages) {
-            source.sendSuccess(() -> Component.literal(
-                "[config] Not yet implemented. conceptId=" + conceptId + " showAllStages=" + showAllStages), false);
+
+            if(source.getLevel() == null) {
+                source.sendFailure(Component.literal("This command must be run in a world."));
+                return 0;
+            }
+            StructureConceptAPI api = new StructureConceptAPI(source.getLevel());
+            JsonObject data = api.getConfig(conceptId, false);
+            if (data == null) {
+                source.sendFailure(Component.literal("No structure concept found with id: " + conceptId));
+                return 0;
+            }
+            String jsonString = data.toString();
+            source.sendSuccess(() -> Component.literal(jsonString), false);
+
             return 1;
         }
     }
@@ -385,8 +396,19 @@ public class CommandList {
         }
 
         private static int execute(CommandSourceStack source, ChunkPos chunkPos) {
-            source.sendSuccess(() -> Component.literal(
-                "[stopUpgrades] Not yet implemented. chunkPos=" + chunkPos), false);
+            // Global pause when no chunk specified
+            if (chunkPos == null) {
+                StructureConceptManager.setPauseUpgrades(true);
+                source.sendSuccess(() -> Component.literal("All structure upgrades paused globally."), true);
+                return 1;
+            }
+            StructureConceptManager mgr = StructureConceptManager.get(source.getLevel());
+            if (mgr == null) {
+                source.sendFailure(Component.literal("No structure manager found for this level."));
+                return 0;
+            }
+            mgr.pauseOrResumeChunkUpgrades(chunkPos, true);
+            source.sendSuccess(() -> Component.literal("Upgrades paused for chunk " + chunkPos + "."), true);
             return 1;
         }
     }
@@ -409,8 +431,8 @@ public class CommandList {
                     .then(Commands.argument("chunkX", IntegerArgumentType.integer())
                         .then(Commands.argument("chunkZ", IntegerArgumentType.integer())
                             .executes(context -> {
-                                int x = IntegerArgumentType.getInteger(context, "x");
-                                int z = IntegerArgumentType.getInteger(context, "z");
+                                int x = IntegerArgumentType.getInteger(context, "chunkX");
+                                int z = IntegerArgumentType.getInteger(context, "chunkZ");
                                 return execute(context.getSource(), new ChunkPos(x, z), false);
                             })
                         )
@@ -423,10 +445,10 @@ public class CommandList {
                 .then(Commands.literal("forceUpgrade")
                     .then(Commands.argument("chunkX", IntegerArgumentType.integer())
                         .then(Commands.argument("chunkZ", IntegerArgumentType.integer())
-                            .then(Commands.literal("confirm")
+                            .then(Commands.argument("confirm", BoolArgumentType.bool())
                                 .executes(context -> {
-                                    int x = IntegerArgumentType.getInteger(context, "x");
-                                    int z = IntegerArgumentType.getInteger(context, "z");
+                                    int x = IntegerArgumentType.getInteger(context, "chunkX");
+                                    int z = IntegerArgumentType.getInteger(context, "chunkZ");
                                     return execute(context.getSource(), new ChunkPos(x, z), true);
                                 })
                             )
@@ -499,8 +521,19 @@ public class CommandList {
         }
 
         private static int execute(CommandSourceStack source, ChunkPos chunkPos) {
-            source.sendSuccess(() -> Component.literal(
-                "[resumeUpgrades] Not yet implemented. chunkPos=" + chunkPos), false);
+            // Global resume when no chunk specified
+            if (chunkPos == null) {
+                StructureConceptManager.setPauseUpgrades(false);
+                source.sendSuccess(() -> Component.literal("All structure upgrades resumed globally."), true);
+                return 1;
+            }
+            StructureConceptManager mgr = StructureConceptManager.get(source.getLevel());
+            if (mgr == null) {
+                source.sendFailure(Component.literal("No structure manager found for this level."));
+                return 0;
+            }
+            mgr.pauseOrResumeChunkUpgrades(chunkPos, false);
+            source.sendSuccess(() -> Component.literal("Upgrades resumed for chunk " + chunkPos + "."), true);
             return 1;
         }
     }

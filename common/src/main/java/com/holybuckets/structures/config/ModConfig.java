@@ -1,5 +1,6 @@
 package com.holybuckets.structures.config;
 
+import com.google.gson.stream.MalformedJsonException;
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.EventRegistrar;
@@ -169,7 +170,7 @@ public class ModConfig {
         File configFile        = new File(configPath);
         File defaultConfigFile = new File(StructureConceptJsonConfig.DEF_CONFIG_FILE_PATH);
 
-        LoggerProject.logInfo(CLASS_ID + "000",
+        LoggerProject.logInfo("012000",
             "Loading structure concept config from: " + configFile.getAbsolutePath());
 
         String json = HBUtil.FileIO.loadJsonConfigs(
@@ -177,10 +178,15 @@ public class ModConfig {
             defaultConfigFile,
             StructureConceptJsonConfig.buildDefaultConfig()
         );
+        try {
+            this.structureConceptConfig = new StructureConceptJsonConfig(json);
+        } catch (RuntimeException e) {
+            String msg = String.format("Failed to parse user structure concept config JSON: %s. Error:\n %s.\n\n Default configs will be applied",
+                 configFile.getAbsolutePath(), e.getCause() );
+            LoggerProject.logError("012002", msg);
+        }
 
-        this.structureConceptConfig = new StructureConceptJsonConfig(json);
-
-        LoggerProject.logInfo(CLASS_ID + "001", "Parsed " + structureConceptConfig.size() + " structure concept(s): "
+        LoggerProject.logInfo("012001", "Parsed " + structureConceptConfig.size() + " structure concept(s): "
             + structureConceptConfig.getAllConceptIds());
 
         //Parse all blackListed structures into resourceLocations

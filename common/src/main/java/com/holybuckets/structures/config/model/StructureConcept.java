@@ -8,6 +8,7 @@ import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.StructuresOverTimeMain;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
@@ -59,12 +60,15 @@ public class StructureConcept {
             this.structureLoc = null;
             includeEntities = false;
             includeLoot = true;
+            this.upgradeStructureTrigger = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
         }
 
-        public StructureConceptStage(int stage, String structureId, boolean addMobs, boolean addLoot) {
+        public StructureConceptStage(int stage, String structureId, String trigger,  boolean addMobs, boolean addLoot) {
             this(stage, structureId);
             this.includeEntities = addMobs;
             this.includeLoot = addLoot;
+            if(trigger != null && !trigger.isEmpty())
+                this.upgradeStructureTrigger = trigger;
         }
 
         // -- Getters --
@@ -136,7 +140,12 @@ public class StructureConcept {
             if( obj.has("includeEntities") ) addMobs = obj.get("includeEntities").getAsBoolean();
             if( obj.has("includeLoot") ) addLoot = obj.get("includeLoot").getAsBoolean();
 
-            return new StructureConceptStage(stage, structId, addMobs, addLoot);
+            //get upgradeStructureTrigger
+            String upgradeTrigger = obj.has("upgradeStructureTrigger")
+                ? obj.get("upgradeStructureTrigger").getAsString()
+                : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
+
+            return new StructureConceptStage(stage, structId, upgradeTrigger, addMobs, addLoot);
         }
     }
 
@@ -219,7 +228,7 @@ public class StructureConcept {
         } catch (NumberFormatException e) {}
 
         Item item = HBUtil.ItemUtil.itemNameToItem(triggerString);
-        if (item != null) return item;
+        if (item != null && !item.equals(Items.AIR)) return item;
 
         Level level = HBUtil.LevelUtil.toLevel(HBUtil.LevelUtil.LevelNameSpace.SERVER, triggerString);
         if (level != null) return level;
@@ -356,10 +365,6 @@ public class StructureConcept {
             ? obj.get("stopUpgradeOnDaysSpentInStructure").getAsInt()
             : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnDaysSpentInStructure;
 
-        //get upgradeStructureTrigger
-        String upgradeTrigger = obj.has("upgradeStructureTrigger")
-            ? obj.get("upgradeStructureTrigger").getAsString()
-            : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
 
         List<StructureConceptStage> stages = new ArrayList<>();
         if (obj.has("stages") && obj.get("stages").isJsonArray()) {

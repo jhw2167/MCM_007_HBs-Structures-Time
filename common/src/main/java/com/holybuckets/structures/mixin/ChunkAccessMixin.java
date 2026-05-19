@@ -32,6 +32,7 @@ public abstract class ChunkAccessMixin {
         ChunkPos chunkPos = getPos();
 
         Map<Structure, StructureStart> filtered = new HashMap<>();
+        filtered.putAll(manager.getInitialStarts(chunkPos));
         for (Structure structure : starts.keySet()) {
             if (manager.isStructureValidForStage(chunkPos, structure)) {
                 filtered.put(structure, starts.get(structure));

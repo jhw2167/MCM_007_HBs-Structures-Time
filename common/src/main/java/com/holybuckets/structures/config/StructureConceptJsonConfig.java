@@ -1,7 +1,9 @@
 package com.holybuckets.structures.config;
 
 import com.google.gson.*;
+import com.google.gson.stream.MalformedJsonException;
 import com.holybuckets.foundation.modelInterface.IStringSerializable;
+import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.model.StructureConcept;
 
 import javax.annotation.Nullable;
@@ -79,14 +81,19 @@ public class StructureConceptJsonConfig implements IStringSerializable {
     }
 
     @Override
-    public void deserialize(String jsonString) {
+    public void deserialize(String jsonString) throws RuntimeException {
         if (jsonString == null || jsonString.isBlank()) return;
 
-        JsonElement parsed = JsonParser.parseString(jsonString);
-        if(!parsed.isJsonArray()) {
-            throw new JsonParseException("Expected a JSON array at the root of the config");
+        try {
+            JsonElement parsed = JsonParser.parseString(jsonString);
+            if(!parsed.isJsonArray()) {
+                throw new JsonParseException("Expected a JSON array at the root of the config");
+            }
+            parseArray(parsed.getAsJsonArray());
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid JSON format for StructureConceptJsonConfig", e);
         }
-        parseArray(parsed.getAsJsonArray());
+
     }
 
     private void parseArray(JsonArray array) {
