@@ -4,6 +4,10 @@ Overview
 Great seed: 1909820652802578134
 nova:tavern_oak at spawn
 
+Production:
+-4480865240807032086, 924, 89, -1213 - awkward village spawn
+-4718902457776554298, 1728, 100, -1392 - nice village spawn
+
 Summarize and suggest problem solutions in chat in pseudo code or real code format. Do not make any edits to code unless explicitly instructed.
 
 Keep Notes:
@@ -371,3 +375,14 @@ Lets add some new commands, we don't have support for all of them yet, but we ca
 
 
 Block out space for each of these as static classes and their own commands in CommandList.java but have them just return default messages at this point.
+
+
+- cataclysm:frosted_prison
+- cataclysm:ruined_citadel
+- cataclysm:soul_black_smith
+castleshift:castle
+nova_structures:illager_camp
+
+1. Unique tab - only spawn 1
+2. Cycle tab - go back to first stage after last stage
+3. 

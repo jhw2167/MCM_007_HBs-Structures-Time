@@ -275,8 +275,7 @@ public class StructureConceptManager {
         {
             EventRegistrar.getInstance().runtimeOnPlayerHasItem(
                 concept.getStructureUpgradeItem(nextStage),
-                (e) -> upgradeMe(nextStage-1, concept),
-                EventPriority.Normal);
+                (e) -> upgradeMe(nextStage-1, concept));
         }
         else if(concept.getStructureUpgradeDays(nextStage) != null) {
             daysSinceUpgrade.put(concept, 0);

@@ -240,11 +240,11 @@ public class CommandList {
             }
 
             if (managedChunk == null) {
-                source.sendFailure(Component.literal("No managed structure found."));
+                source.sendFailure(Component.literal("No managed structure found nearby"));
                 return 0;
             }
 
-            String details = managedChunk.getStructureDetails();
+            String details = managedChunk.getStructureAdvancedDetails();
             source.sendSuccess(() -> Component.literal(details), false);
             return 1;
         }

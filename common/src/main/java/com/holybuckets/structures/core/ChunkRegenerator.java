@@ -14,6 +14,7 @@ import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.Clearable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -272,7 +273,7 @@ public class ChunkRegenerator {
             LevelChunkSection targetSection = target.getSection(index);
 
             if (sourceSection.hasOnlyAir() && targetSection.hasOnlyAir()) continue;
-            copyBlockStates(sourceSection, targetSection, target.getPos(), sectionY, region);
+            copyBlockStates(sourceSection, targetSection, target.getPos(), sectionY, region, target.getLevel());
 
             // Mark affected sections dirty in the light engine so it recomputes
             SectionPos sectionPos = SectionPos.of(target.getPos(), sectionY);
@@ -294,7 +295,8 @@ public class ChunkRegenerator {
 
     // Per-block copy within a section, respecting the bounding box.
     private static void copyBlockStates(LevelChunkSection source, LevelChunkSection target,
-                                        ChunkPos chunkPos, int sectionY, BoundingBox region) {
+                                        ChunkPos chunkPos, int sectionY, BoundingBox region,
+                                        Level realWorld) {
         int baseX = chunkPos.getMinBlockX();
         int baseY = SectionPos.sectionToBlockCoord(sectionY);
         int baseZ = chunkPos.getMinBlockZ();
@@ -307,6 +309,10 @@ public class ChunkRegenerator {
                     int worldZ = baseZ + z;
 
                     if (!region.isInside(worldX, worldY, worldZ)) continue;
+                    BlockPos bp = new BlockPos(worldX, worldY, worldZ);
+                    if( realWorld.getBlockEntity(bp) != null ) {
+                       realWorld.removeBlockEntity(bp);
+                    }
 
                     BlockState state = source.getBlockState(x, y, z);
                     target.setBlockState(x, y, z, state);
