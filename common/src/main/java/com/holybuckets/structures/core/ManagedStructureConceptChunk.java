@@ -189,7 +189,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     @Override
     public ManagedStructureConceptChunk getStaticInstance(LevelAccessor level, String id) {
-        if (id == null || level == null) return null;
+        if (id == null || level == null) return DEFAULT;
         return ManagedStructureConceptChunk.getInstance(level, id);
     }
 
@@ -431,12 +431,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         chunksCompletedUpgrade.clear();
         this.stage = newStage;
         this.pendingUpgrade = true;
-
-
-        StructureManager structureManager = StructureManager.get(level);
-        if(structureManager != null) {
-            structureManager.processStructureLoad(currentStructure, currentStructureStart);
-        }
     }
 
 
@@ -559,6 +553,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 if(currentStructure != null && currentStructureStart != null) {
                     chunk.setStartForStructure(currentStructure, currentStructureStart);
                     chunk.addReferenceForStructure(currentStructure, currentStructureStart.getChunkPos().toLong());
+
+                    StructureManager structureManager = StructureManager.get(level);
+                    if(structureManager != null)
+                        structureManager.processStructureLoad(currentStructure, currentStructureStart);
                 }
 
                 break;
@@ -735,7 +733,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         }
 
     private void warnPlayersOfStructureUpgrade() {
-        if (structureConcept == null) return;
+        if (structureConcept == null || getChunk()==null) return;
         if(StructuresOverTimeMain.CONFIG.enableStructureUpgradeWarning) {
             List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(getChunk(), 34);
             String strDetails = getStructureDetails();
@@ -798,8 +796,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      **/
     @Override
     public CompoundTag serializeNBT() {
-        if (this == DEFAULT || structureConcept == null) return new CompoundTag();
         CompoundTag tag = new CompoundTag();
+        if (this == DEFAULT || structureConcept == null) return tag;
         tag.putString("id", this.id);
 
         if (this.pendingUpgrade) {
@@ -839,8 +837,18 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     @Override
     public void deserializeNBT(CompoundTag tag)
     {
-        if (this == DEFAULT) return;
         if (tag == null || tag.isEmpty()) return;
+        if (this == DEFAULT) {
+            //define new instance, deserialize, set to parent
+            String id = tag.getString("id");
+            if(id == null || id.isEmpty()) return;
+            ManagedChunk parent = getParent(level, id);
+            if (parent == null) return;
+            ManagedStructureConceptChunk newInstance = new ManagedStructureConceptChunk();
+            newInstance.deserializeNBT(tag);
+            parent.setSubclass(ManagedStructureConceptChunk.class, newInstance);
+            return;
+        }
 
         this.id = tag.getString("id");
         this.pos = ChunkUtil.getChunkPos(this.id);

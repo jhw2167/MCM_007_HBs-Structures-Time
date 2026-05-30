@@ -301,68 +301,6 @@ Structure Sets
 - minecraft:woodland_mansions
 
 
-enum UpgradePhase { TERRAIN, DECORATE, COPY, DONE }
-
-private UpgradePhase phase = UpgradePhase.TERRAIN;
-private int chunkIndex = 0;
-private List<ChunkPos> allChunks; // set in triggerStructureUpgrade
-
-private void handleStructureUpgradeOnTick() {
-    if (!pendingUpgrade) return;
-
-    switch (phase) {
-        case TERRAIN:
-            if (chunkIndex >= allChunks.size()) {
-                phase = UpgradePhase.DECORATE;
-                chunkIndex = 0;
-                break;
-            }
-            ChunkPos cp = allChunks.get(chunkIndex);
-            if (regenerateTerrain(cp)) chunkIndex++;
-            // else retry next tick (chunk not loaded)
-            break;
-
-        case DECORATE:
-            // One batch call — only touches proto chunks in RAM
-            boolean success = ChunkRegenerator.applyDecorationBatch(
-                level, allChunks, structureStarts);
-            if (success) {
-                phase = UpgradePhase.COPY;
-                chunkIndex = 0;
-            }
-            // else retry next tick (chunks not loaded)
-            break;
-
-        case COPY:
-            if (chunkIndex >= allChunks.size()) {
-                phase = UpgradePhase.DONE;
-                break;
-            }
-            ChunkPos copyPos = allChunks.get(chunkIndex);
-            BoundingBox area = getAreaForChunk(copyPos); // full chunk or structure box
-            ChunkRegenerator.copyChunk(level, copyPos, area);
-            chunkIndex++;
-            break;
-
-        case DONE:
-            ChunkRegenerator.clearCache(new HashSet<>(allChunks));
-            pendingUpgrade = false;
-            phase = UpgradePhase.TERRAIN;
-            chunkIndex = 0;
-            break;
-    }
-}
-
-
-Command Overview:
-
-consider CommandList.java in 007_HBs-Structures-Time:
-
-```
-package com.holybuckets.structures.command;
-```
-
-
 Lets add some new commands, we don't have support for all of them yet, but we can block out some space:
 
 1. hbStructures getDetails <chunkPos>  - gets details for the structure in the specified chunk. Returns an error if no concept is found in the chunk. Argument is optional, if null, we will search for the nearest structure. Not implemented
@@ -378,9 +316,20 @@ Block out space for each of these as static classes and their own commands in Co
 
 
 - cataclysm:frosted_prison
-- cataclysm:ruined_citadel
-- cataclysm:soul_black_smith
-castleshift:castle
+- cataclysm:cursed_pyramid
+- cataclysm:soul_black_smith - nether
+- cataclysm:ruined_citadel - nether/end
+
+- castleshift:castle
+- smallbiometowers:swamp_tower
+- smallbiometowers:taiga_tower
+- smallbiometowers:beach_tower
+- smallbiometowers:desert_tower
+- smallbiometowers:end_tower
+
+
+
+
 nova_structures:illager_camp
 
 1. Unique tab - only spawn 1
