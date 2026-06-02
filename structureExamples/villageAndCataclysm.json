@@ -1,0 +1,83 @@
+[
+  {
+    "structureConceptId": "fort",
+    "sourceStructureId": "nova_structures:illager_camp",
+    "comments": "Illager fort",
+    "stages": [
+      {
+        "stage": 0,
+        "structureId": "nova_structures:illager_camp"
+      },
+	  {
+        "stage": 1,
+        "structureId": "minecraft:pillager_outpost"
+      },
+      {
+        "stage": 2,
+        "structureId": "minecraft:pillager_outpost"
+      }
+    ]
+  },
+  {
+    "structureConceptId": "village",
+    "sourceStructureId": "minecraft:village_plains",
+    "comments": "A minecraft that begins as a camp, then becomes a tavern, then a village and then an advanced village",
+    "stages": [
+     
+      {
+        "stage": 0,
+        "structureId": "additionalstructures:camp_1"
+      },
+	  {
+        "stage": 1,
+        "structureId": "nova_structures:tavern_oak",
+		"upgradeStructureTrigger": "diamond_sword",
+		"includeEntities": "true"
+      },
+	   {
+        "stage": 2,
+        "structureId": "minecraft:village_plains",
+		"upgradeStructureTrigger": "minecraft:the_nether",
+		"includeEntities": "true"
+      },
+	  {
+        "stage": 3,
+        "structureId": "towns_and_towers:village_meadow",
+		"upgradeStructureTrigger": "1",
+		"includeEntities": "false"
+      }
+    ]
+  },
+  {
+    "structureConceptId": "cataclysmDesertPyramid",
+    "sourceStructureId": "cataclysm:cursed_pyramid",
+    "comments": "Cataclysm Desert pyramid does not appear until a player enters the nether",
+    "stages": [
+	 {
+        "stage": 0,
+        "structureId": "smallbiometowers:desert_tower"
+      },
+      {
+        "stage": 1,
+		"upgradeStructureTrigger": "minecraft:the_nether",
+        "structureId": "cataclysm:cursed_pyramid"
+      }
+    ]
+  },
+  {
+    "structureConceptId": "cataclysmIceFortress",
+    "sourceStructureId": "cataclysm:frosted_prison",
+    "comments": "Cataclysm Ice structure does not appear until player uncovers the Eye",
+    "stages": [
+	 {
+        "stage": 0,
+        "structureId": "smallbiometowers:taiga_tower"
+      },
+      {
+        "stage": 1,
+		"upgradeStructureTrigger": "cataclysm:cursed_eye",
+        "structureId": "cataclysm:frosted_prison"
+      }
+    ]
+  }
+]

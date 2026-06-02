@@ -64,6 +64,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
 
     static final ManagedStructureConceptChunk DEFAULT = new ManagedStructureConceptChunk();
+    static final String DEFAULT_ID = "DEFAULT";
     private boolean pendingUpgrade;
 
     public static void registerManagedChunkData() {
@@ -107,6 +108,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      */
     private ManagedStructureConceptChunk() {
         super();
+        this.id=DEFAULT_ID;
         this.structureStarts = new HashMap<>();
         this.oldStructureArea = new HashSet<>();
         this.newStructureArea = new ArrayList<>();
@@ -132,6 +134,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.structureConcept = MOD_CONFIG.getStructureConcept(sourceStruct);
         this.stage = stage;
         generateAllStructureStarts(ctx.structureStart);
+
     }
 
     //** Events **/
@@ -187,10 +190,21 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      * IMangedChunkData Overrides
      **/
 
+    //resolveStaticinstance, resolveData, staticInstance
     @Override
-    public ManagedStructureConceptChunk getStaticInstance(LevelAccessor level, String id) {
-        if (id == null || level == null) return DEFAULT;
-        return ManagedStructureConceptChunk.getInstance(level, id);
+    public ManagedStructureConceptChunk resolveSubData(LevelAccessor level, String id, @Nullable IMangedChunkData data)
+    {
+        if (id == null || level == null) return null;
+        ManagedStructureConceptChunk subData = (ManagedStructureConceptChunk) data;
+        if(subData != null && subData.getStructureConcept()!=null) {
+             //good, always prioritize serialized data
+        } else {
+            subData = ManagedStructureConceptChunk.getInstance(level, id);
+        }
+        if(subData!= null)
+            StructureConceptManager.addManagedChunk((ServerLevel) level, subData);
+
+        return subData;
     }
 
     @Override
@@ -200,14 +214,14 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     @Override
     public void handleChunkLoaded(ChunkLoadingEvent.Load event) {
-        if (this == DEFAULT) return;
+        if (this.id.equals(DEFAULT_ID)) return;
         chunk = (LevelChunk) event.getChunk();
         level = (ServerLevel) event.getLevel();
     }
 
     @Override
     public void handleChunkUnloaded(ChunkLoadingEvent.Unload event) {
-        if (this == DEFAULT) return;
+        if (this.id.equals(DEFAULT_ID)) return;
     }
 
     //** CORE
@@ -237,15 +251,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      **/
     public static ManagedStructureConceptChunk getInstance(LevelAccessor levelAcc, String id) {
         ChunkPos cp = ChunkUtil.getChunkPos(id);
-        if(StructureConceptManager.get(levelAcc) == null) return DEFAULT;
-        return StructureConceptManager.get(levelAcc).getManagedChunks().getOrDefault(cp, DEFAULT);
-    }
-
-    public static void setInstance(LevelAccessor levelAcc, String id, ManagedStructureConceptChunk c) {
-        ManagedChunk parent = ManagedChunkUtility.getManagedChunk(levelAcc, id);
-        if (parent == null) return;
-        parent.setSubclass(ManagedStructureConceptChunk.class, c);
-
+        if(StructureConceptManager.get(levelAcc) == null) return null;
+        return StructureConceptManager.get(levelAcc).getManagedChunks().get(cp);
     }
 
     public static ManagedChunk getParent(LevelAccessor level, String id) {
@@ -317,7 +324,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             structureBoxes.put(stage.getStructureLoc(), bb);
         }
 
-        setInstance(level, id, this);
     }
 
     /**
@@ -412,11 +418,16 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             BoundingBox structBox = structureBoxes.get(newConcept.getStructureLoc());
             if (box == null)
                 box = structBox;
-            else
+            else {
+                //temp overrides
+                int minY = Math.max(structBox.minY() - 32, level.getMinBuildHeight());
+                int maxY = Math.min(structBox.maxY() + 32, level.getMaxBuildHeight());
                 box = new BoundingBox(
-                    Math.min(box.minX(), structBox.minX()), structBox.minY(), Math.min(box.minZ(), structBox.minZ()),
-                    Math.max(box.maxX(), structBox.maxX()), structBox.maxY(), Math.max(box.maxZ(), structBox.maxZ())
+                    Math.min(box.minX(), structBox.minX()), minY, Math.min(box.minZ(), structBox.minZ()),
+                    Math.max(box.maxX(), structBox.maxX()), maxY, Math.max(box.maxZ(), structBox.maxZ())
                 );
+            }
+
         }
         ChunkPos minPos = new ChunkPos(SectionPos.blockToSectionCoord(box.minX()), SectionPos.blockToSectionCoord(box.minZ()));
         ChunkPos maxPos = new ChunkPos(SectionPos.blockToSectionCoord(box.maxX()), SectionPos.blockToSectionCoord(box.maxZ()));
@@ -431,11 +442,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         chunksCompletedUpgrade.clear();
         this.stage = newStage;
         this.pendingUpgrade = true;
+        upgradeRejectedStatus = -1;
     }
 
 
     //here
-    enum UpgradePhase {TERRAIN, DECORATE, COPY, COPY_LOOT, COPY_MOBS, DONE}
+    enum UpgradePhase {TERRAIN, DECORATE, COPY, COPY_LOOT, COPY_MOBS, DONE, RESET}
 
     private UpgradePhase phase = UpgradePhase.TERRAIN;
     private int chunkIndex = 0;
@@ -467,11 +479,18 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 // One batch call — only touches proto chunks in RAM
                 var starts = new HashMap();
                 starts.put(currentStructure, structureStarts.get(currentStructure));
-                boolean success = ChunkRegenerator.applyDecorationBatch(level, affectedUpgradeChunks,
-                 starts, currentBox, entities);
-                if (success) {
-                    phase = UpgradePhase.COPY;
-                    chunkIndex = 0;
+                try {
+                    boolean success = ChunkRegenerator.applyDecorationBatch(level, affectedUpgradeChunks,
+                 starts, currentBox);
+                    if (success) {
+                        phase = UpgradePhase.COPY;
+                        chunkIndex = 0;
+                    }
+                } catch (Exception e) {
+                    String msg = String.format("Decoration failed for structure upgrade in chunk %s at stage %s. Will retry next tick. Error: %s",
+                        id, stage, e.getMessage());
+                    LoggerProject.logWarning("012013", msg);
+                    phase = UpgradePhase.RESET;
                 }
                 // else retry next tick (chunks not loaded)
                 break;
@@ -527,6 +546,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                         List<StructureTemplate.StructureEntityInfo> ents = ((StructureTemplateAccessor) temp).getEntityInfoList();
                         for(StructureTemplate.StructureEntityInfo info : ents) {
                             EntityType.create(info.nbt, level).ifPresent(entity -> {
+                                entity.setUUID(UUID.randomUUID());
                                 entity.moveTo(piece.getLocatorPosition().offset(info.blockPos), 0, 0);
                                 if (entity instanceof Mob mob) {
                                     mob.finalizeSpawn(level, level.getCurrentDifficultyAt(info.blockPos), MobSpawnType.STRUCTURE, null, null);
@@ -542,11 +562,22 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 phase = UpgradePhase.DONE;
                 break;
 
+            case RESET:
+                ChunkRegenerator.clearCache(new HashSet<>(affectedUpgradeChunks));
+                lootPositions.clear();
+                entities.clear();
+                upgradeRejectedStatus = -1;
+                phase = UpgradePhase.TERRAIN;
+                chunkIndex = 0;
+            break;
+
+
             case DONE:
                 ChunkRegenerator.clearCache(new HashSet<>(affectedUpgradeChunks));
                 lootPositions.clear();
                 entities.clear();
                 pendingUpgrade = false;
+                upgradeRejectedStatus = -1;
                 phase = UpgradePhase.TERRAIN;
                 chunkIndex = 0;
                 currentStructureStart = structureStarts.get(currentStructure);
@@ -560,6 +591,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 }
 
                 break;
+
         }
     }
 
@@ -716,7 +748,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
               msg = baseMessage + " command disabled structure upgrade.";
               throw new StructureUpgradeRejectionException(msg);
             case 5:
-                upgradeRejectedStatus = 5;
+                upgradeRejectedStatus = -1;
                 msg = baseMessage + " chunk is not fully loaded.";
                 throw new StructureUpgradeRejectionException(msg);
             default:
@@ -765,13 +797,52 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             BlockUtil.positionToString( pos.getWorldPosition() ));
     }
 
-    public String getStructureAdvancedDetails() {
+    public String getStructureAdvancedDetails()
+    {
         if (structureConcept == null) return "No structure concept in this chunk.";
-        return String.format("Structure Concept Id: %s\nChunk: %s\nPosition: %s\nCurrent Stage: %d\n" +
-                "Upgrade Rejection Status: %d",
-            structureConcept.getStructureConceptId(), id,
+
+        String rejectMessage = "";
+        if(upgradeRejectedStatus > -1) {
+            try {
+                throwUpgradeRejection(upgradeRejectedStatus);
+            } catch (StructureUpgradeRejectionException e) {
+                rejectMessage = e.getMessage();
+            }
+        }
+
+        String upgradeTrigger = "N/A";
+        if(stage < this.getStructureConcept().getMaxStage() )
+        {
+            var nextStage = structureConcept.getStage(this.stage+1);
+            if(nextStage != null) upgradeTrigger = nextStage.getUpgradeStructureTrigger();
+        }
+
+        String nextStructureId = "N/A";
+        if(stage < this.getStructureConcept().getMaxStage() )
+        {
+            var nextStage = structureConcept.getStage(this.stage+1);
+            if(nextStage != null) nextStructureId = nextStage.getStructureLoc().toString();
+        }
+
+
+        return String.format("Structure Concept Id: %s" +
+         "\nChunk: %s" +
+         "\nPosition: %s" +
+         "\nCurrent Stage: %d" +
+          "\nNext upgrade trigger: %s" +
+          "\nNext structure: %s" +
+          "\nUpgrade Rejection Status: %d" +
+          "\nUpgrade Rejection Reason: %s",
+
+            structureConcept.getStructureConceptId(),
+            id,
             BlockUtil.positionToString( pos.getWorldPosition() ),
-            stage, upgradeRejectedStatus);
+            stage,
+            upgradeTrigger,
+            nextStructureId,
+            upgradeRejectedStatus,
+            rejectMessage
+        );
     }
 
     /**
@@ -797,7 +868,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     @Override
     public CompoundTag serializeNBT() {
         CompoundTag tag = new CompoundTag();
-        if (this == DEFAULT || structureConcept == null) return tag;
+        if (this.id.equals(DEFAULT_ID) || structureConcept == null) return tag;
         tag.putString("id", this.id);
 
         if (this.pendingUpgrade) {
@@ -838,17 +909,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public void deserializeNBT(CompoundTag tag)
     {
         if (tag == null || tag.isEmpty()) return;
-        if (this == DEFAULT) {
-            //define new instance, deserialize, set to parent
-            String id = tag.getString("id");
-            if(id == null || id.isEmpty()) return;
-            ManagedChunk parent = getParent(level, id);
-            if (parent == null) return;
-            ManagedStructureConceptChunk newInstance = new ManagedStructureConceptChunk();
-            newInstance.deserializeNBT(tag);
-            parent.setSubclass(ManagedStructureConceptChunk.class, newInstance);
-            return;
-        }
 
         this.id = tag.getString("id");
         this.pos = ChunkUtil.getChunkPos(this.id);
@@ -888,7 +948,5 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 }
             }
         }
-
-        StructureConceptManager.addManagedChunk(level, this);
     }
 }

@@ -26,8 +26,6 @@ public class CommonClass {
         //RegisterConfigs
         Balm.getConfig().registerConfig(StructuresTimeConfig.class);
         StructuresOverTimeMain.INSTANCE = new StructuresOverTimeMain();
-        BalmEventRegister.registerEvents();
-        BalmEventRegister.registerCommands();
         ModBlocks.initialize(Balm.getBlocks());
         ModBlockEntities.initialize(Balm.getBlockEntities());
         ModItems.initialize(Balm.getItems());

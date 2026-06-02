@@ -95,6 +95,10 @@ public class StructureConcept {
             return includeLoot;
         }
 
+        public String getUpgradeStructureTrigger() {
+            return upgradeStructureTrigger;
+        }
+
         /** Returns true if this stage has an actual structure to place. */
         public boolean hasStructure() {
             return !structureId.isEmpty() && !structureId.equalsIgnoreCase("empty");
@@ -325,6 +329,24 @@ public class StructureConcept {
     /** Removes a stage from this concept's mutable internal list. */
     public boolean removeStage(int stageNumber) {
         return stages.removeIf(s -> s.getStage() == stageNumber);
+    }
+
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof StructureConcept)) return false;
+        StructureConcept other = (StructureConcept) o;
+        if(this.structureConceptId == null) {
+            if( other.structureConceptId == null) return true;
+            else return false;
+        }
+        return this.structureConceptId.equals(other.structureConceptId);
+    }
+
+    @Override
+    public int hashCode() {
+        return structureConceptId != null ? structureConceptId.hashCode() : 0;
     }
 
     // -- Serialization --

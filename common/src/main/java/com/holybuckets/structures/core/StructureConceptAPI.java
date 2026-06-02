@@ -47,24 +47,18 @@ public class StructureConceptAPI {
     }
 
 
-    public boolean forceUpgradeStructure(ChunkPos chunkPos) {
+    public boolean forceUpgradeStructure(ChunkPos chunkPos)
+    {
         var managedChunk = manager.getManagedChunk(chunkPos);
         if(managedChunk == null) return false;
         int newStage = managedChunk.getstage()+1;
         var concept = managedChunk.getStructureConcept();
         StructureConceptManager.pendingStageUpgrades.put(concept, newStage);
+        StructureConceptManager.conceptStages.put(concept, newStage);
         manager.getManagedChunk(chunkPos).triggerStructureUpgrade(newStage, true);
         return true;
     }
 
-    //implement resume structure upgrades which calls triggerStructureUpgrade on the current stage
-    public boolean resumeStructureUpgrades(ChunkPos chunkPos) {
-        var managedChunk = manager.getManagedChunk(chunkPos);
-        if(managedChunk == null) return false;
-        manager.getManagedChunk(chunkPos)
-            .triggerStructureUpgrade(managedChunk.getstage(), true);
-        return true;
-    }
 
     public JsonObject getConfig(String conceptId, boolean showAllStages) {
         StructureConcept concept = StructureConceptManager.MOD_CONFIG.getStructureConcept(conceptId);

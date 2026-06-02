@@ -21,6 +21,7 @@ import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.LevelLoadingEvent;
 import net.blay09.mods.balm.api.event.PlayerChangedDimensionEvent;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
+import net.blay09.mods.balm.api.event.server.ServerStoppedEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
@@ -82,7 +83,7 @@ public class StructureConceptManager {
         this.registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         this.managedChunks = new HashMap<>();
         MANAGERS.put(level, this);
-        LoggerProject.logInit(CLASS_ID + "000", StructureConceptManager.class.getName());
+        LoggerProject.logInit("011000", StructureConceptManager.class.getName());
     }
 
 
@@ -144,9 +145,7 @@ public class StructureConceptManager {
         if (managedChunk != null) {
             managedChunk.handleChunkLoaded(event);
             String structId = managedChunk.getStructureConcept().getStructureConceptId();
-            LoggerProject.logDebug(CLASS_ID + "032", "Chunk loaded: " + chunkId + " " + structId );
-        } else {
-            ManagedStructureConceptChunk.setInstance(event.getLevel(), chunkId, ManagedStructureConceptChunk.DEFAULT);
+            LoggerProject.logDebug("011032", "Chunk loaded: " + chunkId + " " + structId );
         }
     }
 
@@ -223,7 +222,6 @@ public class StructureConceptManager {
     public ManagedStructureConceptChunk registerManagedChunk(StructureSetStartContext ctx)
     {
         ChunkPos cp = ctx.sectionPos.chunk();
-        String id = ChunkUtil.getId(cp);
         if (managedChunks.containsKey(cp)) {
              return managedChunks.get(cp);
         }
@@ -331,13 +329,13 @@ public class StructureConceptManager {
             setNextUpgradeTrigger(concept, conceptStages.get(concept)+1);
         }
 
-        LoggerProject.logDebug(CLASS_ID + "001", "Loaded globalStage: " + globalStage);
+        LoggerProject.logDebug("011001", "Loaded globalStage: " + globalStage);
         StringBuilder conceptStagesLog = new StringBuilder("Loaded concept stages:\n");
         for(Map.Entry<StructureConcept, Integer> entry : conceptStages.entrySet()) {
             String id = entry.getKey().getStructureConceptId();
             conceptStagesLog.append(id).append(": ").append(entry.getValue()).append("\n");
         }
-        LoggerProject.logDebug(CLASS_ID + "001", conceptStagesLog.toString());
+        LoggerProject.logDebug("011009", conceptStagesLog.toString());
 
         //load daysSince upgrade out of "daysSinceUpgrade"
         JsonElement daysSinceUpgradeEl = worldData.get("daysSinceUpgrade");
@@ -355,10 +353,11 @@ public class StructureConceptManager {
 
     }
 
-    private static void save(DataStore ds) {
+    private static void save(DataStore ds)
+    {
         WorldSaveData worldData = ds.getOrCreateWorldSaveData(Constants.MOD_ID);
         worldData.addProperty(KEY_GLOBAL_STAGE, new JsonPrimitive(globalStage));
-        LoggerProject.logDebug(CLASS_ID + "002", "Saved globalStage: " + globalStage);
+        LoggerProject.logDebug("011002", "Saved globalStage: " + globalStage);
 
         //Save all entries in playerSpawnPos as a json object with "key": "blockpos"
         JsonObject spawnPosObj = new JsonObject();
@@ -407,10 +406,11 @@ public class StructureConceptManager {
 
     public static void init(EventRegistrar reg) {
         reg.registerOnBeforeServerStarted(StructureConceptManager::onServerStart);
+        reg.registerOnServerStopped(StructureConceptManager::onServerStopped);
         reg.registerOnLevelLoad(StructureConceptManager::onLevelLoad, EventPriority.High);
         reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
         //reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
-        reg.registerOnServerTick(TickType.ON_120_TICKS, StructureConceptManager::on6000Ticks);
+        reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::on6000Ticks);
         //reg.registerOnServerTick(TickType.ON_6000_TICKS, StructureConceptManager::on6000Ticks);
         reg.registerOnServerTick(TickType.ON_SINGLE_TICK, StructureConceptManager::onServerTick);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
@@ -428,6 +428,19 @@ public class StructureConceptManager {
         ManagedStructureConceptChunk.MOD_CONFIG = ModConfig.getInstance();
 
     }
+
+    private static void onServerStopped(ServerStoppedEvent event) {
+        for(var manager : MANAGERS.values()) {
+            manager.managedChunks.clear();
+        }
+        StructureConceptManager.conceptStages.clear();
+        StructureConceptManager.pendingStageUpgrades.clear();
+        StructureConceptManager.daysSinceUpgrade.clear();
+
+        StructureConceptManager.MANAGERS.clear();
+    }
+
+
 
     private static void onLevelLoad(LevelLoadingEvent.Load event) {
         if (event.getLevel().isClientSide()) return;

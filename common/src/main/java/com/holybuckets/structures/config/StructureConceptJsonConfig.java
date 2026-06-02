@@ -108,34 +108,37 @@ public class StructureConceptJsonConfig implements IStringSerializable {
 
 
     //** DEFAULTS **//
-
     public static StructureConceptJsonConfig buildDefaultConfig() {
         List<StructureConcept> concepts = new ArrayList<>();
 
         // village: witch hut → village → (empty) → pillager outpost
         List<StructureConcept.StructureConceptStage> villageStages = List.of(
-            new StructureConcept.StructureConceptStage(1, "minecraft:swamp_hut"),
-            new StructureConcept.StructureConceptStage(2, "minecraft:village_plains"),
-            new StructureConcept.StructureConceptStage(3, ""),
-            new StructureConcept.StructureConceptStage(4, "minecraft:pillager_outpost")
+            new StructureConcept.StructureConceptStage(0, "minecraft:swamp_hut", "32", false, true),
+            new StructureConcept.StructureConceptStage(1, "minecraft:village_plains", "the_nether", true, true),
+            new StructureConcept.StructureConceptStage(2, "", "the_end", false, true),
+            new StructureConcept.StructureConceptStage(3, "minecraft:pillager_outpost", "32", true, true)
         );
         concepts.add(new StructureConcept(
             "village",
-            "minecraft:village_plains",
+            "minecraft:swamp_hut",
             "A village that starts as a witch hut, evolves into a village, skips stage 3, and then becomes a pillager outpost",
-            villageStages
+            villageStages,
+            true,
+            0,
+            8
         ));
 
         // vanishingShip: shipwreck → empty
         List<StructureConcept.StructureConceptStage> shipStages = List.of(
-            new StructureConcept.StructureConceptStage(1, "minecraft:shipwreck"),
-            new StructureConcept.StructureConceptStage(2, "empty")
+            new StructureConcept.StructureConceptStage(0, "minecraft:shipwreck", "32", false, true),
+            new StructureConcept.StructureConceptStage(1, "", "32", false, true)
         );
         concepts.add(new StructureConcept(
             "vanishingShip",
             "minecraft:shipwreck",
             "A Shipwreck which disappears after the early game",
-            shipStages
+            shipStages,
+            false, 0, 8
         ));
 
         return new StructureConceptJsonConfig(concepts);

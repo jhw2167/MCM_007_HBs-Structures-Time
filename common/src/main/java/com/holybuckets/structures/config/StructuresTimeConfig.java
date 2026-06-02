@@ -81,7 +81,7 @@ public class StructuresTimeConfig {
         public int stopUpgradeOnTotalChestCount = -1;       //stops structure upgrade if a lot of chest on placed in the structure
 
         @Comment("Default stopUpgradeOnDaysSpentInStructure: 8. If a player has woken up (from a bed) at least this number of times then this structure will not upgrade unless forced. Set to -1 to ignore.")
-        public int stopUpgradeOnDaysSpentInStructure = 1;    //stops structure upgrade if player has spent a lot of time in the structure
+        public int stopUpgradeOnDaysSpentInStructure = 8;    //stops structure upgrade if player has spent a lot of time in the structure
 
 
         @Comment("Default upgradeStructureTrigger: 32. By default a structure will upgrade to its next stage after 32 days. You can change this number, set it to an item or dimension name. This setting only changes the default value; edit the value(s) in HBStructuresConceptConfig.json to change it for each structure and stage.")

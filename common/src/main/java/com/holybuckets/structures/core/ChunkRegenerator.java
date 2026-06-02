@@ -15,7 +15,6 @@ import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.Clearable;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
@@ -113,8 +112,8 @@ public class ChunkRegenerator {
      */
     public static boolean applyDecorationBatch(ServerLevel level, List<ChunkPos> chunksToDecorate,
                                                Map<Structure, StructureStart> starts,
-                                               BoundingBox structureArea, List<Entity> entities ) {
-        try {
+                                               BoundingBox structureArea) {
+
             if (chunksToDecorate.isEmpty() || CHUNK_CACHE.isEmpty()) return false;
 
             ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
@@ -182,20 +181,7 @@ public class ChunkRegenerator {
                 centerChunk.setStatus(ChunkStatus.FEATURES);
             }
 
-            /*
-            entities.addAll( region.getEntities(null, new AABB(
-                structureArea.minX(), structureArea.minY(), structureArea.minZ(),
-                structureArea.maxX(), structureArea.maxY(), structureArea.maxZ()
-            )) );
-            */
-
-
             return true;
-        } catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "013", "Decoration failed: " + e.getMessage());
-            return false;
-        }
-
     }
 
 
