@@ -99,14 +99,14 @@ public class StructureConceptAPI {
 
         json.addProperty("totalStages", concept.getStageCount());
         json.addProperty("sourceStructureId", concept.getSourceStructureId());
+        json.addProperty("","");
 
-        if(showAllStages){
-            StringBuilder structureLines = new StringBuilder();
+        if(showAllStages)
+        {
             List<StructureConcept.StructureConceptStage> stages = concept.getStages();
             for(var stage : stages) {
-                structureLines.append("\n" + stage.getStage() + " - Structure: " + stage.getStructureId());
+                json.addProperty(""+stage.getStage(), "Structure: " +stage.getStructureId());
             }
-            json.addProperty("stages", structureLines.toString());
         }
 
         return json;

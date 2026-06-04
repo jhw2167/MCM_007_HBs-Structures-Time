@@ -348,6 +348,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             }
             return;
         }
+        if(pendingUpgrade) return;
         if( testRejectStructureUpgrade() ) return;
 
         if(nextStage == nextStageQueued) {
@@ -641,7 +642,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         ProtoChunk proto = ChunkRegenerator.createProtoChunk(level, pos);
 
 
-        List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 4);
+        List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 5);
         boolean allLoaded = localChunks.stream().allMatch(id -> {
             return util.getManagedChunk(id)!=null && util.getManagedChunk(id).getCachedLevelChunk() instanceof LevelChunk;
         });

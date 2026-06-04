@@ -119,7 +119,7 @@ public class StructureConcept {
 
         /** Returns true if this stage explicitly removes / leaves empty. */
         public boolean isEmpty() {
-            return structureId.isEmpty() || structureId.equals(ModConfig.EMPTY_STRUCTURE_LOC.toString());
+            return structureId.equals(ModConfig.EMPTY_STRUCTURE_LOC.toString());
         }
 
         public boolean isSkip() {
@@ -157,6 +157,13 @@ public class StructureConcept {
             String upgradeTrigger = obj.has("upgradeStructureTrigger")
                 ? obj.get("upgradeStructureTrigger").getAsString()
                 : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
+
+            //replace constant strings "empty" and "skip" with the config defaults if encountered in the trigger (for backward compatibility with old configs)
+            if(upgradeTrigger.equalsIgnoreCase("empty")) {
+                upgradeTrigger = ModConfig.EMPTY_STRUCTURE_LOC.toString();
+            } else if(upgradeTrigger.equalsIgnoreCase("skip")) {
+                upgradeTrigger = ModConfig.SKIP_STRUCTURE_LOC.toString();
+            }
 
             return new StructureConceptStage(stage, structId, upgradeTrigger, addMobs, addLoot);
         }

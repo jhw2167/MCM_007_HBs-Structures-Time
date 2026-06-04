@@ -259,6 +259,7 @@ public class CommandList {
 
 
     //5. Config
+    //"source, "ID:
     private static class Config
     {
         private static LiteralArgumentBuilder<CommandSourceStack> noArgs() {
@@ -277,8 +278,8 @@ public class CommandList {
                         StringBuilder sb = new StringBuilder("Structure Concepts:");
                         for (StructureConcept c : concepts) {
                             sb.append("\nID: ").append(c.getStructureConceptId())
-                              .append(", source: ").append(c.getSourceStructureId())
-                                .append(", stages: ").append(c.getStageCount());
+                              .append(", SOURCE: ").append(c.getSourceStructureId())
+                                .append(", STAGES: ").append(c.getStageCount());
 
                         }
                         context.getSource().sendSuccess(() -> Component.literal(sb.toString()), false);
@@ -369,8 +370,9 @@ public class CommandList {
 
         private static int execute(CommandSourceStack source, String conceptId, int stageNo) {
             // stageNo == -1 => return total stage count
-            source.sendSuccess(() -> Component.literal(
-                "[stageConfig] Not yet implemented. conceptId=" + conceptId + " stageNo=" + stageNo), false);
+            StructureConceptAPI api = new StructureConceptAPI(source.getLevel());
+            //JsonObject data = api.getStageConfig(conceptId, stageNo);
+
             return 1;
         }
     }
@@ -418,12 +420,15 @@ public class CommandList {
 
             //print as ID: <id>, Pos: <blockPos> \n - Stage: <stage>\n  - Structure: <structureLoc>
             StringBuilder sb = new StringBuilder("Nearby Structures:");
-            for (ManagedStructureConceptChunk c : structs) {
-                sb.append("\nID: ").append(c.getId())
-                  .append(", Pos: ").append(c.getChunkPos().toString())
+            for (ManagedStructureConceptChunk c : structs)
+            {
+                StructureConcept concept = c.getStructureConcept();
+                sb.append("\nID: ").append(concept.getStructureConceptId())
+                  .append(", Pos: ").append(c.getChunkPos().getWorldPosition())
                   .append("\n    - Current Stage: ").append(c.getstage())
-                  .append("\n    - Current Structure: ").append(c.getStructureConcept().getSourceStructureId());
+                  .append("\n    - Current Structure: ").append(concept.getStage(c.getstage()).getStructureLoc().toString());
             }
+            source.sendSuccess(() -> Component.literal(sb.toString()), false);
 
             return 1;
         }
@@ -606,9 +611,9 @@ public class CommandList {
 
         StringBuilder sb = new StringBuilder();
         for (String key : json.keySet()) {
-            sb.append(key).append(": ").append(json.get(key).toString()).append("\n");
+            sb.append(key).append(" - ").append(json.get(key).toString()).append("\n");
         }
-        source.sendSuccess(() -> Component.literal(sb.toString()), false);
+        source.sendSuccess(() -> Component.literal(sb.toString() ), false);
 
     }
 

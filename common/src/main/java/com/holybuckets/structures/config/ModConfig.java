@@ -107,8 +107,6 @@ public class ModConfig {
             List<Integer> stagesToRemove = new ArrayList<>();
             for (StructureConceptStage stage : concept.getStages())
             {
-                if (stage.isEmpty()) continue;
-
                 String stageStructId = stage.getStructureId();
                 ResourceLocation stageHolder = getStructure(registry, stageStructId);
                 if (stageHolder == null) {
@@ -147,6 +145,10 @@ public class ModConfig {
      */
     @Nullable
     private static ResourceLocation getStructure(Registry<Structure> registry, String resourceLocationStr) {
+        if(resourceLocationStr == null || resourceLocationStr.isEmpty()) return SKIP_STRUCTURE_LOC;
+        if(resourceLocationStr.equalsIgnoreCase("skip")) return EMPTY_STRUCTURE_LOC;
+        if(resourceLocationStr.equalsIgnoreCase("empty")) return EMPTY_STRUCTURE_LOC;
+
         ResourceLocation loc = new ResourceLocation(resourceLocationStr);
         Structure s = registry.getOptional(loc).orElse(null);
         return (s != null) ? loc : null;
@@ -184,6 +186,10 @@ public class ModConfig {
             String msg = String.format("Failed to parse user structure concept config JSON: %s. Error:\n %s.\n\n Default configs will be applied",
                  configFile.getAbsolutePath(), e.getCause() );
             LoggerProject.logError("012002", msg);
+            this.structureConceptConfig = new StructureConceptJsonConfig(
+                StructureConceptJsonConfig.buildDefaultConfig().serialize()
+                );
+
         }
 
         LoggerProject.logInfo("012001", "Parsed " + structureConceptConfig.size() + " structure concept(s): "
