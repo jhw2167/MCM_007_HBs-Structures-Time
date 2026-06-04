@@ -43,6 +43,16 @@ Track Players Near Structures - need to know if player has actually discovered s
 - need to start saving client data on client side, we can do json in client folder
 
 
+To Do:
+---
+
+1. look into 
+---
+
+
+
+
+
 Some integrated Structures:
 ---
 

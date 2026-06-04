@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.StructuresOverTimeMain;
+import com.holybuckets.structures.config.ModConfig;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -56,8 +57,16 @@ public class StructureConcept {
 
         public StructureConceptStage(int stage, String structureId) {
             this.stage = stage;
-            this.structureId = (structureId == null) ? "" : structureId;
-            this.structureLoc = null;
+            if(structureId == null || structureId.isEmpty())
+                this.structureId = ModConfig.EMPTY_STRUCTURE_LOC.toString();
+            else
+                this.structureId = structureId.trim();
+
+            if( structureId.contains(":") ) {
+                this.structureLoc = new ResourceLocation(structureId);
+            } else {
+                this.structureLoc = new ResourceLocation("minecraft", structureId);
+            }
             includeEntities = false;
             includeLoot = true;
             this.upgradeStructureTrigger = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
@@ -101,7 +110,7 @@ public class StructureConcept {
 
         /** Returns true if this stage has an actual structure to place. */
         public boolean hasStructure() {
-            return !structureId.isEmpty() && !structureId.equalsIgnoreCase("empty");
+            return !structureId.isEmpty() && !structureId.equals(ModConfig.EMPTY_STRUCTURE_LOC.toString());
         }
 
         public boolean is(ResourceLocation s) {
@@ -110,11 +119,11 @@ public class StructureConcept {
 
         /** Returns true if this stage explicitly removes / leaves empty. */
         public boolean isEmpty() {
-            return structureId.isEmpty() || structureId.equalsIgnoreCase("empty");
+            return structureId.isEmpty() || structureId.equals(ModConfig.EMPTY_STRUCTURE_LOC.toString());
         }
 
         public boolean isSkip() {
-            return structureId.equalsIgnoreCase("skip");
+            return structureId.equals(ModConfig.SKIP_STRUCTURE_LOC.toString());
         }
 
         // -- Registry resolution --
@@ -308,8 +317,8 @@ public class StructureConcept {
      */
     @Nullable
     public StructureConceptStage getStage(int stageNumber) {
-        if( stageNumber < 0 ) return  new StructureConceptStage(-1, "empty");
-        StructureConceptStage result = new StructureConceptStage(stageNumber, "skip");
+        if( stageNumber < 0 ) return  new StructureConceptStage(-1, ModConfig.EMPTY_STRUCTURE_LOC.toString());
+        StructureConceptStage result = new StructureConceptStage(stageNumber, ModConfig.SKIP_STRUCTURE_LOC.toString());
         for (StructureConceptStage s : stages) {
             if (s.getStage() == stageNumber) result = s;
         }

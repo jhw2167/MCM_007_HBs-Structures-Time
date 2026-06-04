@@ -9,6 +9,10 @@ import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import static com.holybuckets.foundation.HBUtil.ChunkUtil.*;
 
 /**
@@ -60,6 +64,31 @@ public class StructureConceptAPI {
     }
 
 
+    public List<ManagedStructureConceptChunk> getStructuresNearPoint(BlockPos pos) {
+        return getStructuresNearPoint(pos, null, 5);
+    }
+    //implement getStructuresNearPoint(BlockPos pos, int limit)
+    public List<ManagedStructureConceptChunk> getStructuresNearPoint(BlockPos pos, String conceptId, int limit)
+    {
+        List<ManagedStructureConceptChunk> nearbyStructures = new ArrayList<>();
+        ChunkPos center = new ChunkPos(pos);
+        //sort manager.getManagedChunks().values() by distance to center
+        List<ChunkPos> sortedChunks = new ArrayList<>(manager.getManagedChunks().keySet());
+        Collections.sort(sortedChunks, (a, b) -> {
+            double distA = chunkDist(center, a);
+            double distB = chunkDist(center, b);
+            return Double.compare(distA, distB);
+        });
+        sortedChunks.stream().filter(cp -> {
+            var chunk = manager.getManagedChunk(cp);
+            if(conceptId == null) return true;
+            return chunk.getStructureConcept().getStructureConceptId().equals(conceptId);
+        })
+        .forEach( cp -> nearbyStructures.add(manager.getManagedChunk(cp)) );
+
+        return nearbyStructures.subList(0, Math.min(limit, nearbyStructures.size()));
+    }
+
     public JsonObject getConfig(String conceptId, boolean showAllStages) {
         StructureConcept concept = StructureConceptManager.MOD_CONFIG.getStructureConcept(conceptId);
 
@@ -70,6 +99,15 @@ public class StructureConceptAPI {
 
         json.addProperty("totalStages", concept.getStageCount());
         json.addProperty("sourceStructureId", concept.getSourceStructureId());
+
+        if(showAllStages){
+            StringBuilder structureLines = new StringBuilder();
+            List<StructureConcept.StructureConceptStage> stages = concept.getStages();
+            for(var stage : stages) {
+                structureLines.append("\n" + stage.getStage() + " - Structure: " + stage.getStructureId());
+            }
+            json.addProperty("stages", structureLines.toString());
+        }
 
         return json;
     }

@@ -6,11 +6,14 @@ import com.google.gson.JsonObject;
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.CommandRegistry;
+import com.holybuckets.foundation.structure.StructureAPI;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.core.ChunkRegenerator;
 import com.holybuckets.structures.core.ManagedStructureConceptChunk;
 import com.holybuckets.structures.core.StructureConceptAPI;
 import com.holybuckets.structures.core.StructureConceptManager;
+import com.holybuckets.structures.config.ModConfig;
+import com.holybuckets.structures.config.model.StructureConcept;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -28,6 +31,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ProtoChunk;
 
+import javax.annotation.Nullable;
+import java.util.Collection;
 import java.util.List;
 
 public class CommandList {
@@ -43,6 +48,7 @@ public class CommandList {
         CommandRegistry.register(RegenerateChunk::noArgs);
         CommandRegistry.register(GetDetails::noArgs);
         CommandRegistry.register(GetDetails::withChunkPos);
+        CommandRegistry.register(Config::noArgs);
         CommandRegistry.register(Config::withConceptId);
         CommandRegistry.register(Config::withConceptIdAndShowStages);
         CommandRegistry.register(StageConfig::withConceptId);
@@ -255,6 +261,32 @@ public class CommandList {
     //5. Config
     private static class Config
     {
+        private static LiteralArgumentBuilder<CommandSourceStack> noArgs() {
+            return Commands.literal(PREFIX)
+                .then(Commands.literal("config")
+                    .executes(context -> {
+                        if (context.getSource().getLevel() == null) {
+                            context.getSource().sendFailure(Component.literal("This command must be run in a world."));
+                            return 0;
+                        }
+                        Collection<StructureConcept> concepts = ModConfig.getInstance().getConcepts();
+                        if (concepts.isEmpty()) {
+                            context.getSource().sendSuccess(() -> Component.literal("No structure concepts loaded."), false);
+                            return 1;
+                        }
+                        StringBuilder sb = new StringBuilder("Structure Concepts:");
+                        for (StructureConcept c : concepts) {
+                            sb.append("\nID: ").append(c.getStructureConceptId())
+                              .append(", source: ").append(c.getSourceStructureId())
+                                .append(", stages: ").append(c.getStageCount());
+
+                        }
+                        context.getSource().sendSuccess(() -> Component.literal(sb.toString()), false);
+                        return 1;
+                    })
+                );
+        }
+
         private static LiteralArgumentBuilder<CommandSourceStack> withConceptId() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("config")
@@ -290,13 +322,12 @@ public class CommandList {
                 return 0;
             }
             StructureConceptAPI api = new StructureConceptAPI(source.getLevel());
-            JsonObject data = api.getConfig(conceptId, false);
+            JsonObject data = api.getConfig(conceptId, showAllStages);
             if (data == null) {
                 source.sendFailure(Component.literal("No structure concept found with id: " + conceptId));
                 return 0;
             }
-            String jsonString = data.toString();
-            source.sendSuccess(() -> Component.literal(jsonString), false);
+            printJson(source, data);
 
             return 1;
         }
@@ -346,28 +377,58 @@ public class CommandList {
 //END COMMAND
 
 
-    //7. Locate
     private static class Locate
     {
         private static LiteralArgumentBuilder<CommandSourceStack> withConceptId() {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("locate")
+                    // No args: no conceptId, default limit 5
+                    .executes(context -> execute(context.getSource(), null, 5))
+                    // With limit only
+                    .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                        .executes(context -> execute(
+                            context.getSource(),
+                            null,
+                            IntegerArgumentType.getInteger(context, "limit")
+                        ))
+                        // With limit + conceptId
+                        .then(Commands.argument("structureConceptId", StringArgumentType.string())
+                            .executes(context -> execute(
+                                context.getSource(),
+                                StringArgumentType.getString(context, "structureConceptId"),
+                                IntegerArgumentType.getInteger(context, "limit")
+                            ))
+                        )
+                    )
+                    // conceptId only, default limit 5
                     .then(Commands.argument("structureConceptId", StringArgumentType.string())
-                        .executes(context -> {
-                            String conceptId = StringArgumentType.getString(context, "structureConceptId");
-                            return execute(context.getSource(), conceptId);
-                        })
+                        .executes(context -> execute(
+                            context.getSource(),
+                            StringArgumentType.getString(context, "structureConceptId"),
+                            5
+                        ))
                     )
                 );
         }
 
-        private static int execute(CommandSourceStack source, String conceptId) {
-            source.sendSuccess(() -> Component.literal(
-                "[locate] Not yet implemented. conceptId=" + conceptId), false);
+        private static int execute(CommandSourceStack source, @Nullable String conceptId, int limit) {
+            StructureConceptAPI api = new StructureConceptAPI(source.getLevel());
+            BlockPos point = source.getPlayer().blockPosition();
+            List<ManagedStructureConceptChunk> structs = api.getStructuresNearPoint(point, conceptId, limit);
+
+            //print as ID: <id>, Pos: <blockPos> \n - Stage: <stage>\n  - Structure: <structureLoc>
+            StringBuilder sb = new StringBuilder("Nearby Structures:");
+            for (ManagedStructureConceptChunk c : structs) {
+                sb.append("\nID: ").append(c.getId())
+                  .append(", Pos: ").append(c.getChunkPos().toString())
+                  .append("\n    - Current Stage: ").append(c.getstage())
+                  .append("\n    - Current Structure: ").append(c.getStructureConcept().getSourceStructureId());
+            }
+
             return 1;
         }
     }
-//END COMMAND
+    //END COMMAND
 
 
     //8. Stop Upgrades
@@ -540,7 +601,16 @@ public class CommandList {
     }
 //END COMMAND
 
+//write a method that prints json by printing all attributes on a new line
+    private static void printJson(CommandSourceStack source, JsonObject json) {
 
+        StringBuilder sb = new StringBuilder();
+        for (String key : json.keySet()) {
+            sb.append(key).append(": ").append(json.get(key).toString()).append("\n");
+        }
+        source.sendSuccess(() -> Component.literal(sb.toString()), false);
+
+    }
 
 
 }

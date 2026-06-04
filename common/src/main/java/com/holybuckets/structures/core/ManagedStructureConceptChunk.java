@@ -25,7 +25,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.*;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.ChunkPos;
@@ -39,7 +38,6 @@ import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -79,6 +77,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private String id;
     private ChunkPos pos;
     private int stage;
+    private int pendingStage;
     private StructureConcept structureConcept;
     private LevelChunk chunk;
     private ProtoChunk protoChunk;
@@ -133,13 +132,14 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         ResourceLocation sourceStruct = MOD_CONFIG.loc(ctx.structure);
         this.structureConcept = MOD_CONFIG.getStructureConcept(sourceStruct);
         this.stage = stage;
-        generateAllStructureStarts(ctx.structureStart);
+        generateStructureStarts(ctx.structureStart);
 
     }
 
     //** Events **/
     public void onServerTick(ServerTickEvent event) {
         if(chunk==null) this.chunk = getChunk();
+        if(!ManagedChunkUtility.isChunkLoaded(level, id)) return;
         handleStructureUpgradeOnTick();
     }
 
@@ -266,8 +266,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      * For each stage, calls Structure::findValidGenerationPoint directly with a forced biome
      * predicate, then constructs and stores a StructureStart in the chunk's structureStarts map.
      * Goes one layer deeper than Structure::generate to bypass the outer validity guard.
+     *
+     * generateStructureStarts, generateStarts, generateAllStarts
      */
-    public void generateAllStructureStarts(StructureStart sStart) {
+    public void generateStructureStarts(StructureStart sStart) {
         if (level == null || structureConcept == null) return;
         if (sStart == null) {
             Structure originalChunkStruct = MOD_CONFIG.structure(structureConcept.getSourceStructure());
@@ -339,7 +341,13 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public void queueStructureUpgrade(int nextStage)
     {
         if(nextStage== stage) return;
-        if(upgradeRejectedStatus>-1) return;
+        if(upgradeRejectedStatus>-1)
+        {
+            if(upgradeRejectedStatus==5 && ManagedChunkUtility.isChunkFullyLoaded(level, id)) {
+                upgradeRejectedStatus=-1; //reset rejection due to chunk unload
+            }
+            return;
+        }
         if( testRejectStructureUpgrade() ) return;
 
         if(nextStage == nextStageQueued) {
@@ -397,7 +405,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         ResourceLocation prevStructLoc = structureConcept.getStage(this.stage).getStructureLoc();
         oldStructureArea.clear();
         newStructureArea.clear();
-        if (!MOD_CONFIG.isEmptyStructure(prevStructLoc)) {
+        if(!MOD_CONFIG.isEmptyStructure(prevStructLoc) && !MOD_CONFIG.isSkipStructure(prevStructLoc) )
+        {
             Structure prevStructure = MOD_CONFIG.structure(prevStructLoc);
             StructureStart prevStructureStart = structureStarts.get(prevStructure);
             BoundingBox prevBox = prevStructureStart.getBoundingBox();
@@ -414,12 +423,21 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         //4. Check if all chunks are available for chunk regeneration
 
         BoundingBox box = previousbox;
+        if (MOD_CONFIG.isEmptyStructure(strLoc))
+        {
+            // Empty stage: clearing area is the old structure's footprint
+            if (box == null && !oldStructureArea.isEmpty()) {
+                Structure prevStructure = MOD_CONFIG.structure(prevStructLoc);
+                StructureStart prevStart = structureStarts.get(prevStructure);
+                if (prevStart != null) box = prevStart.getBoundingBox();
+            }
+        }
+        else
         {
             BoundingBox structBox = structureBoxes.get(newConcept.getStructureLoc());
             if (box == null)
                 box = structBox;
             else {
-                //temp overrides
                 int minY = Math.max(structBox.minY() - 32, level.getMinBuildHeight());
                 int maxY = Math.min(structBox.maxY() + 32, level.getMaxBuildHeight());
                 box = new BoundingBox(
@@ -427,7 +445,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                     Math.max(box.maxX(), structBox.maxX()), maxY, Math.max(box.maxZ(), structBox.maxZ())
                 );
             }
-
         }
         ChunkPos minPos = new ChunkPos(SectionPos.blockToSectionCoord(box.minX()), SectionPos.blockToSectionCoord(box.minZ()));
         ChunkPos maxPos = new ChunkPos(SectionPos.blockToSectionCoord(box.maxX()), SectionPos.blockToSectionCoord(box.maxZ()));
@@ -440,9 +457,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         chunksCompletedRefresh.clear();
         chunksCompletedUpgrade.clear();
-        this.stage = newStage;
+        //this.stage = newStage; - do this after upgrade completes
+        this.pendingStage = newStage;
         this.pendingUpgrade = true;
-        upgradeRejectedStatus = -1;
+        this.upgradeRejectedStatus = -1;
     }
 
 
@@ -580,6 +598,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 upgradeRejectedStatus = -1;
                 phase = UpgradePhase.TERRAIN;
                 chunkIndex = 0;
+                this.stage = pendingStage;
                 currentStructureStart = structureStarts.get(currentStructure);
                 if(currentStructure != null && currentStructureStart != null) {
                     chunk.setStartForStructure(currentStructure, currentStructureStart);
@@ -622,10 +641,9 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         ProtoChunk proto = ChunkRegenerator.createProtoChunk(level, pos);
 
 
-        List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 8);
+        List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 4);
         boolean allLoaded = localChunks.stream().allMatch(id -> {
-            return util.isLoaded(id) && util.isChunkFullyLoaded(id) &&
-                util.getManagedChunk(id).getCachedLevelChunk() instanceof LevelChunk;
+            return util.getManagedChunk(id)!=null && util.getManagedChunk(id).getCachedLevelChunk() instanceof LevelChunk;
         });
         if (!allLoaded) return false;
         List<ChunkAccess> chunks = localChunks.stream()
@@ -654,7 +672,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
             List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(getChunk(), 34);
             nearbyPlayers.forEach(p -> Messager.getInstance().sendChat(p, e.getMessage()));
-            LoggerProject.logInfo(CLASS_ID + "003", "Structure upgrade rejected for chunk " + id + ": " + e.getMessage());
+            LoggerProject.logInfo("010003", "Structure upgrade rejected for chunk " + id + ": " + e.getMessage());
             return true;
         }
     }
@@ -725,7 +743,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         private void throwUpgradeRejection(int rejectCase) throws StructureUpgradeRejectionException
         {
-        String baseMessage = getStructureDetails() + "\n\nStructure upgrade rejected: ";
+        String baseMessage = getStructureDetails() + "\nStructure upgrade rejected: ";
         String msg="";
         switch (rejectCase)
         {
@@ -748,7 +766,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
               msg = baseMessage + " command disabled structure upgrade.";
               throw new StructureUpgradeRejectionException(msg);
             case 5:
-                upgradeRejectedStatus = -1;
+                upgradeRejectedStatus = 5;
                 msg = baseMessage + " chunk is not fully loaded.";
                 throw new StructureUpgradeRejectionException(msg);
             default:
@@ -797,6 +815,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             BlockUtil.positionToString( pos.getWorldPosition() ));
     }
 
+    //getAdvancedDetails, advancedDetails
     public String getStructureAdvancedDetails()
     {
         if (structureConcept == null) return "No structure concept in this chunk.";
@@ -829,6 +848,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
          "\nChunk: %s" +
          "\nPosition: %s" +
          "\nCurrent Stage: %d" +
+         "\nIs Pending Upgrade: %s" +
           "\nNext upgrade trigger: %s" +
           "\nNext structure: %s" +
           "\nUpgrade Rejection Status: %d" +
@@ -838,6 +858,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             id,
             BlockUtil.positionToString( pos.getWorldPosition() ),
             stage,
+            pendingUpgrade,
             upgradeTrigger,
             nextStructureId,
             upgradeRejectedStatus,
@@ -877,7 +898,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             tag.putInt("stage", this.stage);
         }
 
-        tag.putInt("rejectedUpgrade", this.upgradeRejectedStatus);
+        tag.putInt("upgradeRejectedStatus", this.upgradeRejectedStatus);
 
         tag.putString("structure", structureConcept.getStructureConceptId());
 
@@ -919,9 +940,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             this.structureConcept = MOD_CONFIG.getStructureConcept(conceptId);
         }
 
-        this.upgradeRejectedStatus = -1;
-        if(tag.contains("rejectedUpgrade")) {
-            this.upgradeRejectedStatus = tag.getInt("rejectedUpgrade");
+        if(tag.contains("upgradeRejectedStatus")) {
+            this.upgradeRejectedStatus = tag.getInt("upgradeRejectedStatus");
         }
 
         // Deserialize structure starts using vanilla StructureStart.loadStaticStart

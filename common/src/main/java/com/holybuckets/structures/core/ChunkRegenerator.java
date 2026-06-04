@@ -22,6 +22,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.levelgen.GenerationStep;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -60,7 +61,7 @@ public class ChunkRegenerator {
             protoChunk.setStatus(ChunkStatus.STRUCTURE_REFERENCES);
 
             CompletableFuture<ChunkAccess> biomesFuture = generator.createBiomes(
-                level.getServer(), randomState, Blender.of(region),
+                level.getServer(), randomState, Blender.empty(),
                 level.structureManager().forWorldGenRegion(region), protoChunk
             );
             level.getServer().managedBlock(biomesFuture::isDone);
@@ -77,9 +78,10 @@ public class ChunkRegenerator {
                 randomState, protoChunk);
             protoChunk.setStatus(ChunkStatus.SURFACE);
 
-            generator.applyCarvers(region, level.getSeed(), randomState, level.getBiomeManager(),
+           /* generator.applyCarvers(region, level.getSeed(), randomState, level.getBiomeManager(),
                 level.structureManager().forWorldGenRegion(region), protoChunk,
-                GenerationStep.Carving.AIR);
+                GenerationStep.Carving.AIR); //removed for performance concerns
+            */
             protoChunk.setStatus(ChunkStatus.CARVERS);
 
             /*
@@ -93,7 +95,10 @@ public class ChunkRegenerator {
              */
 
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
+            //catch and move on from carver runtime exceptions for OOB region check
+        }
+        catch (Exception e) {
             e.getMessage();
             e.printStackTrace();
             throw new RuntimeException("Terrain regeneration failed at " + pos + ": " + e.getMessage(), e);
@@ -272,8 +277,9 @@ public class ChunkRegenerator {
             if (!region.isInside(bePos)) continue;
             BlockEntity protoBe = source.getBlockEntity(bePos);
             if (protoBe == null) continue;
-            target.setBlockEntity(protoBe);
+            level.setBlockEntity(protoBe);
         }
+
 
         // Also flag sky + block light as needing a full re-check for this chunk
         level.getChunkSource().getLightEngine().propagateLightSources(target.getPos());
@@ -294,14 +300,17 @@ public class ChunkRegenerator {
                     int worldY = baseY + y;
                     int worldZ = baseZ + z;
 
-                    if (!region.isInside(worldX, worldY, worldZ)) continue;
+                    if(!region.isInside(worldX, worldY, worldZ)) continue;
+                    BlockState state = source.getBlockState(x, y, z);
+                    if(state.equals(target.getBlockState(x, y, z))) continue;
+
                     BlockPos bp = new BlockPos(worldX, worldY, worldZ);
                     if( realWorld.getBlockEntity(bp) != null ) {
                        realWorld.removeBlockEntity(bp);
                     }
 
-                    BlockState state = source.getBlockState(x, y, z);
-                    target.setBlockState(x, y, z, state);
+                    realWorld.setBlock(bp, state, 3);
+                    //target.setBlockState(x, y, z, state);
                 }
             }
         }

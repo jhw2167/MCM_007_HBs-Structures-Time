@@ -115,7 +115,7 @@ public class StructureConceptJsonConfig implements IStringSerializable {
         List<StructureConcept.StructureConceptStage> villageStages = List.of(
             new StructureConcept.StructureConceptStage(0, "minecraft:swamp_hut", "32", false, true),
             new StructureConcept.StructureConceptStage(1, "minecraft:village_plains", "the_nether", true, true),
-            new StructureConcept.StructureConceptStage(2, "", "the_end", false, true),
+            new StructureConcept.StructureConceptStage(2, "empty", "the_end", false, true),
             new StructureConcept.StructureConceptStage(3, "minecraft:pillager_outpost", "32", true, true)
         );
         concepts.add(new StructureConcept(
@@ -124,7 +124,7 @@ public class StructureConceptJsonConfig implements IStringSerializable {
             "A village that starts as a witch hut, evolves into a village, skips stage 3, and then becomes a pillager outpost",
             villageStages,
             true,
-            0,
+            -1,
             8
         ));
 

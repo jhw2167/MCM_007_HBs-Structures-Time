@@ -27,7 +27,6 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -410,7 +409,7 @@ public class StructureConceptManager {
         reg.registerOnLevelLoad(StructureConceptManager::onLevelLoad, EventPriority.High);
         reg.registerOnChunkLoad(StructureConceptManager::onChunkLoadEvent);
         //reg.registerOnChunkUnload(StructureConceptManager::onChunkUnloadEvent);
-        reg.registerOnServerTick(TickType.ON_1200_TICKS, StructureConceptManager::on6000Ticks);
+        reg.registerOnServerTick(TickType.ON_120_TICKS, StructureConceptManager::on1200Ticks);
         //reg.registerOnServerTick(TickType.ON_6000_TICKS, StructureConceptManager::on6000Ticks);
         reg.registerOnServerTick(TickType.ON_SINGLE_TICK, StructureConceptManager::onServerTick);
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
@@ -465,7 +464,7 @@ public class StructureConceptManager {
         }
     }
 
-    private static void on6000Ticks(ServerTickEvent event) {
+    private static void on1200Ticks(ServerTickEvent event) {
         //track player spawn points
 
         for(ServerPlayer player : HBUtil.PlayerUtil.getAllPlayers()) {
@@ -500,6 +499,7 @@ public class StructureConceptManager {
         var daysKeys = new HashSet<>(daysSinceUpgrade.keySet());
         for(StructureConcept c : daysKeys) {
             int s = conceptStages.get(c);
+            if( c.getStructureUpgradeDays(s+1) == null) continue;
             boolean upgrade = c.getStructureUpgradeDays(s+1) >= daysSinceUpgrade.get(c);
             if(upgrade) {
                 upgradeMe(s, c); daysSinceUpgrade.remove(c);

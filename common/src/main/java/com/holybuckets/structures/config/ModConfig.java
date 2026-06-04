@@ -81,11 +81,8 @@ public class ModConfig {
     private void initStructures(MinecraftServer server)
     {
 
-        EMPTY_STRUCT = registry.getOptional(new ResourceLocation(Constants.MOD_ID,
-            "empty")).orElse(null);
-
-        SKIP_STRUCT = registry.getOptional(new ResourceLocation(Constants.MOD_ID,
-            "skip")).orElse(null);
+        EMPTY_STRUCT = registry.getOptional(EMPTY_STRUCTURE_LOC).orElse(null);
+        SKIP_STRUCT = registry.getOptional(SKIP_STRUCTURE_LOC).orElse(null);
 
         for (StructureConcept concept : structureConceptConfig.getAllConcepts())
         {
@@ -154,6 +151,9 @@ public class ModConfig {
         Structure s = registry.getOptional(loc).orElse(null);
         return (s != null) ? loc : null;
     }
+
+    public static final ResourceLocation EMPTY_STRUCTURE_LOC = new ResourceLocation(Constants.MOD_ID, "empty");
+    public static final ResourceLocation SKIP_STRUCTURE_LOC = new ResourceLocation(Constants.MOD_ID, "skip");
 
     /** Default structure instance indicating the previous structure should be removed **/
     public static Structure EMPTY_STRUCT;
@@ -249,7 +249,7 @@ public class ModConfig {
      */
     public boolean isEmptyStructure(ResourceLocation loc) {
         if(loc==null) return true;
-        return loc.equals(loc(EMPTY_STRUCT));
+        return loc.equals(EMPTY_STRUCTURE_LOC);
     }
 
     public boolean isEmptyStructure(Structure s) {
@@ -260,7 +260,7 @@ public class ModConfig {
 
     public boolean isSkipStructure(ResourceLocation loc) {
         if(loc==null) return false;
-        return loc.equals(loc(SKIP_STRUCT));
+        return loc.equals(SKIP_STRUCTURE_LOC);
     }
 
         public boolean isSkipStructure(Structure s) {
