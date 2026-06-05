@@ -90,6 +90,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private StructureStart currentStructureStart;
     private BoundingBox currentBox;
     private BoundingBox previousbox;
+    private BoundingBox entityBox;
 
     private Set<ChunkPos> oldStructureArea; //ChunkPos used by old area
     private List<ChunkPos> newStructureArea; //ChunkPos that will be utilized by new structure
@@ -99,6 +100,9 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     private List<BlockPos> lootPositions; //to be used for copying loot contents
     private List<Entity> entities; //to be used for copying mobs
+
+    private final Set<UUID> spawnedEntityIds = new HashSet<>(); //UUIDs of entities spawned with the current structure
+    private final Map<EntityType<?>, Integer> spawnedEntityCounts = new HashMap<>(); //type counts for best-effort clearing after reload
 
     private int countTotalWakeups;
     private int upgradeRejectedStatus;
@@ -132,6 +136,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.level = level;
         this.pos = cp;
         this.id = ChunkUtil.getId(cp);
+        this.entityBox = monitorEntityArea();
         this.chunk = ManagedChunkUtility.getInstance(level).getChunk(id,false);
         ResourceLocation sourceStruct = MOD_CONFIG.loc(ctx.structure);
         this.structureConcept = MOD_CONFIG.getStructureConcept(sourceStruct);
@@ -397,13 +402,21 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             return;
         }
 
-        if (previousbox == null && MOD_CONFIG.isEmptyStructure(strLoc)) {
+        //only skip an empty transition when the ending stage had no structure to clear
+        ResourceLocation endingStructLoc = structureConcept.getStage(this.stage).getStructureLoc();
+        if (MOD_CONFIG.isEmptyStructure(strLoc)
+            && (MOD_CONFIG.isEmptyStructure(endingStructLoc) || MOD_CONFIG.isSkipStructure(endingStructLoc))) {
             this.stage = newStage;
             return;
         }
 
         //Empty structures are processed to clear the land as well
         currentStructure = MOD_CONFIG.structure(newConcept.getStructureLoc());
+
+        //remove entities spawned by the ending stage if it is configured to do so
+        if (structureConcept.getStage(this.stage).isRemoveEntitiesAfterStage()) {
+            clearSpawnedEntities();
+        }
 
 
         //3. Obtain all old chunksPos for clearing
@@ -576,6 +589,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                                 }
 
                                 level.addFreshEntityWithPassengers(entity);
+                                spawnedEntityIds.add(entity.getUUID());
+                                spawnedEntityCounts.merge(entity.getType(), 1, Integer::sum);
                             });
 
                         }
@@ -881,28 +896,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if(!list.isEmpty()) countTotalWakeups++;
     }
 
-    //16-chunk-radius box around the center chunk used for entity kill/count conditions
-    private BoundingBox getEntityArea() {
-        if (level == null || pos == null) return null;
-        int minX = (pos.x - ENTITY_AREA_RANGE) << 4;
-        int minZ = (pos.z - ENTITY_AREA_RANGE) << 4;
-        int maxX = ((pos.x + ENTITY_AREA_RANGE) << 4) + 15;
-        int maxZ = ((pos.z + ENTITY_AREA_RANGE) << 4) + 15;
-        return new BoundingBox(minX, level.getMinBuildHeight(), minZ, maxX, level.getMaxBuildHeight(), maxZ);
-    }
-
     public boolean isInEntityArea(BlockPos p) {
-        BoundingBox area = getEntityArea();
-        return area != null && area.isInside(p);
+        return entityBox.isInside(p);
     }
 
     //increments the local kill tally when a configured upgrade entity dies in this area
     public void onEntityKilledInArea(EntityType<?> deadType) {
-        if (structureConcept == null) return;
-        StructureConceptStage next = structureConcept.getStage(stage + 1);
-        if (next == null) return;
-        Map<EntityType<?>, Integer> killCfg = next.getUpgradeStructureOnMobsKilled();
-        if (killCfg == null || !killCfg.containsKey(deadType)) return;
         localEntityKillCount++;
     }
 
@@ -913,10 +912,50 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     //counts live entities of the given type in the area in real time
     public boolean testCountLocalEntities(EntityType<?> mob, int count) {
         if (level == null) return false;
-        BoundingBox area = getEntityArea();
-        if (area == null) return false;
-        int found = level.getEntitiesOfClass(Entity.class, AABB.of(area), e -> e.getType() == mob).size();
+        int found = level.getEntitiesOfClass(Entity.class, AABB.of(entityBox), e -> e.getType() == mob).size();
         return found >= count;
+    }
+
+    //16-chunk-radius box around the center chunk used for entity kill/count conditions
+    private BoundingBox monitorEntityArea() {
+        if (level == null || pos == null) return null;
+        int minX = pos.x - ENTITY_AREA_RANGE;
+        int minZ = pos.z - ENTITY_AREA_RANGE;
+        int maxX = pos.x + ENTITY_AREA_RANGE;
+        int maxZ = pos.z + ENTITY_AREA_RANGE;
+        BlockPos min = new ChunkPos(minX, minZ).getWorldPosition();
+        BlockPos max = new ChunkPos(maxX, maxZ).getWorldPosition().offset(15, 0, 15);
+        return new BoundingBox(min.getX(), level.getMinBuildHeight(), min.getZ(),
+        max.getX(), level.getMaxBuildHeight(), max.getZ());
+    }
+
+
+    //removes entities spawned with this structure (no drops); precise by UUID, else best-effort by type counts
+    private void clearSpawnedEntities() {
+        if (level == null) return;
+        if (!spawnedEntityIds.isEmpty()) {
+            for (UUID uuid : spawnedEntityIds) {
+                Entity e = level.getEntity(uuid);
+                if (e != null) e.discard();
+            }
+        } else if (!spawnedEntityCounts.isEmpty()) {
+            BoundingBox area = entityBox;
+            if (area != null) {
+                BlockPos center = pos.getWorldPosition();
+                List<Entity> candidates = level.getEntitiesOfClass(Entity.class, AABB.of(area),
+                    e -> spawnedEntityCounts.containsKey(e.getType()));
+                candidates.sort(Comparator.comparingDouble(e -> e.blockPosition().distSqr(center)));
+                Map<EntityType<?>, Integer> remaining = new HashMap<>(spawnedEntityCounts);
+                for (Entity e : candidates) {
+                    int left = remaining.getOrDefault(e.getType(), 0);
+                    if (left <= 0) continue;
+                    e.discard();
+                    remaining.put(e.getType(), left - 1);
+                }
+            }
+        }
+        spawnedEntityIds.clear();
+        spawnedEntityCounts.clear();
     }
 
     private LevelChunk getChunk() {
@@ -945,6 +984,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         tag.putInt("upgradeRejectedStatus", this.upgradeRejectedStatus);
         tag.putInt("localEntityKillCount", this.localEntityKillCount);
+
+        if (!spawnedEntityCounts.isEmpty()) {
+            CompoundTag countsTag = new CompoundTag();
+            spawnedEntityCounts.forEach((type, count) -> countsTag.putInt(EntityType.getKey(type).toString(), count));
+            tag.put("spawnedEntityCounts", countsTag);
+        }
 
         tag.putString("structure", structureConcept.getStructureConceptId());
 
@@ -992,6 +1037,14 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         if(tag.contains("localEntityKillCount")) {
             this.localEntityKillCount = tag.getInt("localEntityKillCount");
+        }
+
+        if(tag.contains("spawnedEntityCounts")) {
+            CompoundTag countsTag = tag.getCompound("spawnedEntityCounts");
+            for(String key : countsTag.getAllKeys()) {
+                EntityType<?> type = HBUtil.EntityUtil.entityNameToEntityType(key);
+                if(type != null) spawnedEntityCounts.put(type, countsTag.getInt(key));
+            }
         }
 
         // Deserialize structure starts using vanilla StructureStart.loadStaticStart

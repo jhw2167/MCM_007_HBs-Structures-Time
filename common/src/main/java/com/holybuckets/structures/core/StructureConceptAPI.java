@@ -91,6 +91,7 @@ public class StructureConceptAPI {
 
     public JsonObject getConfig(String conceptId, boolean showAllStages) {
         StructureConcept concept = StructureConceptManager.MOD_CONFIG.getStructureConcept(conceptId);
+        if(concept == null) return null;
 
         JsonObject json = new JsonObject();
         //Add conceptId, stage, and all config values to json

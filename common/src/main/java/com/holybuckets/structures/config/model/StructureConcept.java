@@ -44,7 +44,7 @@ public class StructureConcept {
     private int stopUpgradeOnTotalChestCount;       //stops structure upgrade if a lot of chest on placed in the structure
     private int stopUpgradeOnDaysSpentInStructure;  //stops structure upgrade if significant time is spent in structure
     private int cycleStage;                     //loops structures back to this  stage after its last stage, -1 for no cycle
-    private boolean unique;                         //only one instance of this concept may exist at a time
+    private int uniqueStage;                     //stage after which only one instance of this concept may exist, -1 for none
 
     private final List<StructureConceptStage> stages;
 
@@ -65,7 +65,7 @@ public class StructureConcept {
         this.stopUpgradeOnTotalChestCount      = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnTotalChestCount;
         this.stopUpgradeOnDaysSpentInStructure = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnDaysSpentInStructure;
         this.cycleStage                     = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.cycleStage;
-        this.unique                            = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.unique;
+        this.uniqueStage                       = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.uniqueStage;
     }
 
     // Wide constructor delegates to the narrow one then overrides upgrade-stop flags
@@ -120,12 +120,12 @@ public class StructureConcept {
 
     public void setCycleStage(int cycleStage) { this.cycleStage = cycleStage; }
 
-    public boolean isUnique() {
-        return unique;
+    public int getUniqueStage() {
+        return uniqueStage;
     }
 
-    public void setUnique(boolean unique) {
-        this.unique = unique;
+    public void setUniqueStage(int uniqueStage) {
+        this.uniqueStage = uniqueStage;
     }
 
     @Nullable
@@ -245,7 +245,7 @@ public class StructureConcept {
     public StructureConceptStage getStage(int stageNumber) {
         if( stageNumber < 0 ) return  new StructureConceptStage(-1, ModConfig.EMPTY_STRUCTURE_LOC.toString());
         StructureConceptStage result = new StructureConceptStage(stageNumber, ModConfig.SKIP_STRUCTURE_LOC.toString());
-        if(cycleStage!=-1 && stageNumber==getMaxStage()+1) stageNumber=cycleStage;
+        if(cycleStage!=-1 && stageNumber>getMaxStage()+1) stageNumber=cycleStage;
         for (StructureConceptStage s : stages) {
             if (s.getStage() == stageNumber) result = s;
         }
@@ -296,7 +296,7 @@ public class StructureConcept {
         obj.addProperty("stopUpgradeOnTotalChestCount", stopUpgradeOnTotalChestCount);
         obj.addProperty("stopUpgradeOnDaysSpentInStructure", stopUpgradeOnDaysSpentInStructure);
         obj.addProperty("cycleStage", cycleStage);
-        obj.addProperty("unique", unique);
+        obj.addProperty("uniqueStage", uniqueStage);
 
         JsonArray stagesArray = new JsonArray();
         for (StructureConceptStage stage : stages) {
@@ -338,8 +338,8 @@ public class StructureConcept {
 
         StructureConcept concept = new StructureConcept(conceptId, sourceId, comments, stages,
             stopSpawn, stopChest, stopDays);
-        if (obj.has("cycleUpgrades")) concept.setCycleStage(obj.get("cycleUpgrades").getAsInt());
-        if (obj.has("unique")) concept.setUnique(obj.get("unique").getAsBoolean());
+        if (obj.has("cycleStage")) concept.setCycleStage(obj.get("cycleStage").getAsInt());
+        if (obj.has("uniqueStage")) concept.setUniqueStage(obj.get("uniqueStage").getAsInt());
         return concept;
     }
 }

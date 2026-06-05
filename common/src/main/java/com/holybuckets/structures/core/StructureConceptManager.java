@@ -16,6 +16,7 @@ import com.holybuckets.structures.Constants;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
+import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.ChunkLoadingEvent;
 import net.blay09.mods.balm.api.event.LivingDeathEvent;
 import net.blay09.mods.balm.api.event.EventPriority;
@@ -68,7 +69,7 @@ public class StructureConceptManager {
     private final ServerLevel level;
     private final Registry<Structure> registry;
     private final Map<ChunkPos, ManagedStructureConceptChunk> managedChunks;
-    private final Map<EntityType<?>, List<ManagedStructureConceptChunk>> mobTrackingChunks = new HashMap<>();
+    private final Map<EntityType<?>, Set<ManagedStructureConceptChunk>> mobTrackingChunks = new HashMap<>();
     private static int globalStage=0;
 
 
@@ -78,6 +79,7 @@ public class StructureConceptManager {
     static GeneralConfig GENERAL_CONFIG;
     static Map<String, BlockPos> playerSpawnPos = new HashMap<>();
     static Map<StructureConcept, Integer> conceptStages = new HashMap<>();
+    static final Map<StructureConcept, ChunkPos> uniqueStructureChunks = new HashMap<>(); //concept -> the one chunk allowed past uniqueStage
     static boolean pauseUpgrades = false;
 
 
@@ -150,6 +152,7 @@ public class StructureConceptManager {
             managedChunk.handleChunkLoaded(event);
             String structId = managedChunk.getStructureConcept().getStructureConceptId();
             LoggerProject.logDebug("011032", "Chunk loaded: " + chunkId + " " + structId );
+            this.refreshMobTrackingChunks();
         }
     }
 
@@ -249,7 +252,7 @@ public class StructureConceptManager {
         for(ManagedStructureConceptChunk chunk : managedChunks.values()) {
             StructureConcept concept = chunk.getStructureConcept();
             if(concept == null) continue;
-            checkEntityTriggers(chunk);
+            //checkEntityTriggers(chunk);
             checkDaylightTriggers(concept, daylight);
         }
 
@@ -263,7 +266,18 @@ public class StructureConceptManager {
             if(!conceptStages.containsKey(concept)) continue;
             int stage = conceptStages.get(concept);
 
-            chunk.queueStructureUpgrade(stage);
+            int target = stage;
+            int uniqueStage = concept.getUniqueStage();
+            if(uniqueStage >= 0 && stage > uniqueStage) {
+                ChunkPos claim = uniqueStructureChunks.get(concept);
+                if(claim == null) {
+                    claim = chunk.getChunkPos();
+                    uniqueStructureChunks.put(concept, claim);
+                }
+                if(!claim.equals(chunk.getChunkPos())) target = uniqueStage; //non-unique chunks cap at uniqueStage
+            }
+
+            chunk.queueStructureUpgrade(target);
         }
     }
 
@@ -316,17 +330,25 @@ public class StructureConceptManager {
     //rebuilds the kill-tracking index from every managed chunk's next-stage mob criteria
     private void refreshMobTrackingChunks()
     {
+
         mobTrackingChunks.clear();
-        for(ManagedStructureConceptChunk chunk : managedChunks.values()) {
-            StructureConcept concept = chunk.getStructureConcept();
-            if(concept == null) continue;
-            Integer stage = conceptStages.get(concept);
-            if(stage == null) continue;
-            Map<EntityType<?>, Integer> killed = concept.getStructureUpgradeMobsKilled(stage + 1);
+        Map<StructureConcept, EntityType> applicableConcepts = new HashMap<>();
+        for(var concept : conceptStages.keySet() )
+        {
+            int nextStage = conceptStages.get(concept) + 1;
+            Map<EntityType<?>, Integer> killed = concept.getStructureUpgradeMobsKilled(nextStage);
             if(killed == null) continue;
+            EntityType<?> mob = null;
             for(EntityType<?> type : killed.keySet()) {
-                mobTrackingChunks.computeIfAbsent(type, k -> new ArrayList<>()).add(chunk);
+                mobTrackingChunks.put(type, new HashSet<>());
+                mob = type;
             }
+            applicableConcepts.put(concept, mob);
+        }
+        for(ManagedStructureConceptChunk chunk : managedChunks.values()) {
+            var concept = chunk.getStructureConcept();
+            if( applicableConcepts.get(concept) == null) continue;
+                mobTrackingChunks.get(applicableConcepts.get(concept)).add(chunk);
         }
     }
 
@@ -368,7 +390,7 @@ public class StructureConceptManager {
         StructureConceptManager manager = MANAGERS.get(dead.level());
         if(manager == null) return;
         EntityType<?> type = dead.getType();
-        List<ManagedStructureConceptChunk> chunks = manager.mobTrackingChunks.get(type);
+        Set<ManagedStructureConceptChunk> chunks = manager.mobTrackingChunks.get(type);
         if(chunks == null || chunks.isEmpty()) return;
         BlockPos deathPos = dead.blockPosition();
         for(ManagedStructureConceptChunk chunk : chunks) {
@@ -388,7 +410,7 @@ public class StructureConceptManager {
     private static void load(DataStore ds)
     {
         WorldSaveData worldData = ds.getOrCreateWorldSaveData(Constants.MOD_ID);
-        com.google.gson.JsonElement stageEl = worldData.get(KEY_GLOBAL_STAGE);
+        JsonElement stageEl = worldData.get(KEY_GLOBAL_STAGE);
         globalStage = (stageEl != null) ? stageEl.getAsInt() : 0;
 
         JsonElement spawnPosEl = worldData.get(KEY_PLAYER_SPAWN_POS);
@@ -445,6 +467,17 @@ public class StructureConceptManager {
             }
         }
 
+        //load the unique structure claim per concept
+        JsonElement uniqueEl = worldData.get("uniqueStructureChunks");
+        if(uniqueEl != null && uniqueEl.isJsonObject()) {
+            for(Map.Entry<String, JsonElement> entry : uniqueEl.getAsJsonObject().entrySet()) {
+                StructureConcept concept = MOD_CONFIG.getStructureConcept(entry.getKey());
+                if(concept != null) {
+                    uniqueStructureChunks.put(concept, ChunkUtil.getChunkPos(entry.getValue().getAsString()));
+                }
+            }
+        }
+
         for(StructureConceptManager m : MANAGERS.values()) m.refreshMobTrackingChunks();
     }
 
@@ -480,6 +513,12 @@ public class StructureConceptManager {
         }
         worldData.addProperty("daysSinceUpgrade", daysSinceUpgradeObj);
 
+        //save the unique structure claim per concept
+        JsonObject uniqueObj = new JsonObject();
+        for (Map.Entry<StructureConcept, ChunkPos> entry : uniqueStructureChunks.entrySet()) {
+            uniqueObj.addProperty(entry.getKey().getStructureConceptId(), ChunkUtil.getId(entry.getValue()));
+        }
+        worldData.addProperty("uniqueStructureChunks", uniqueObj);
     }
 
 
@@ -511,7 +550,7 @@ public class StructureConceptManager {
         reg.registerOnDataSave(StructureConceptManager::onDataSave);
         reg.registerOnDailyTick(GeneralConfig.OVERWORLD_LOC, StructureConceptManager::onDailyTick);
         reg.registerOnPlayerChangedDimension(StructureConceptManager::handleDimensionChange);
-        reg.registerOnPlayerDeath(StructureConceptManager::handleEntityDeath);
+        Balm.getEvents().onEvent(LivingDeathEvent.class, StructureConceptManager::handleEntityDeath);
 
         ManagedStructureConceptChunk.registerManagedChunkData();
     }
@@ -533,6 +572,7 @@ public class StructureConceptManager {
         StructureConceptManager.conceptStages.clear();
         StructureConceptManager.pendingStageUpgrades.clear();
         StructureConceptManager.daysSinceUpgrade.clear();
+        StructureConceptManager.uniqueStructureChunks.clear();
 
         StructureConceptManager.MANAGERS.clear();
     }
@@ -540,6 +580,7 @@ public class StructureConceptManager {
 
 
     private static void onLevelLoad(LevelLoadingEvent.Load event) {
+        if(true) return;
         if (event.getLevel().isClientSide()) return;
 
         if(MANAGERS.containsKey(event.getLevel())) return;

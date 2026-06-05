@@ -92,8 +92,8 @@ public class StructuresTimeConfig {
         @Comment("Default removeEntities: false. If true, entities in the structure area are removed when a stage ends.")
         public boolean removeEntities = false;
 
-        @Comment("Default unique: false. If true, only one instance of this structure concept may exist in the world at a time. Chosen at random out of all available options.")
-        public boolean unique = false;
+        @Comment("Default uniqueStage: -1. The stage after which only one instance of this structure concept may exist in the world. -1 disables uniqueness.")
+        public int uniqueStage = -1;
 
     }
 
