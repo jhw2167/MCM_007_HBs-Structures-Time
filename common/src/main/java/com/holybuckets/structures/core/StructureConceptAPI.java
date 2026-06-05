@@ -1,8 +1,8 @@
 package com.holybuckets.structures.core;
 
 import com.google.gson.JsonObject;
-import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.structures.config.model.StructureConcept;
+import com.holybuckets.structures.config.model.StructureConceptStage;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -103,7 +103,7 @@ public class StructureConceptAPI {
 
         if(showAllStages)
         {
-            List<StructureConcept.StructureConceptStage> stages = concept.getStages();
+            List<StructureConceptStage> stages = concept.getStages();
             for(var stage : stages) {
                 json.addProperty(""+stage.getStage(), "Structure: " +stage.getStructureId());
             }

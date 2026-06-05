@@ -1,13 +1,12 @@
 package com.holybuckets.structures.config;
 
-import com.google.gson.stream.MalformedJsonException;
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.event.EventRegistrar;
 import com.holybuckets.structures.Constants;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.model.StructureConcept;
-import com.holybuckets.structures.config.model.StructureConcept.StructureConceptStage;
+import com.holybuckets.structures.config.model.StructureConceptStage;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.balm.api.event.EventPriority;
 import net.blay09.mods.balm.api.event.server.ServerStartingEvent;
@@ -78,6 +77,7 @@ public class ModConfig {
         return activeStructureConcepts.get(loc);
     }
 
+    //on before server start
     private void initStructures(MinecraftServer server)
     {
 
@@ -116,6 +116,7 @@ public class ModConfig {
                     stagesToRemove.add(stage.getStage());
                 } else {
                     stage.setStructureLoc(stageHolder);
+                    stage.hydrateTriggers();
                 }
             }
 

@@ -7,7 +7,9 @@ import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.StructuresOverTimeMain;
 import com.holybuckets.structures.config.ModConfig;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
@@ -15,6 +17,7 @@ import net.minecraft.world.level.Level;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Class: StructureConcept
@@ -40,134 +43,12 @@ public class StructureConcept {
     private boolean stopUpgradeIfSpawnpointSet;         //stops structure from upgrading if player spawnpoint is set in the structure
     private int stopUpgradeOnTotalChestCount;       //stops structure upgrade if a lot of chest on placed in the structure
     private int stopUpgradeOnDaysSpentInStructure;  //stops structure upgrade if significant time is spent in structure
+    private int cycleStage;                     //loops structures back to this  stage after its last stage, -1 for no cycle
+    private boolean unique;                         //only one instance of this concept may exist at a time
 
     private final List<StructureConceptStage> stages;
 
     private ResourceLocation sourceStructure;
-
-    public static class StructureConceptStage {
-
-        private final int stage;
-        private final String structureId;
-        private ResourceLocation structureLoc;
-        private boolean includeEntities;
-        private boolean includeLoot;
-
-        private String upgradeStructureTrigger="32"; //can be an item, a dimension, or a number of days
-
-        public StructureConceptStage(int stage, String structureId) {
-            this.stage = stage;
-            if(structureId == null || structureId.isEmpty())
-                this.structureId = ModConfig.EMPTY_STRUCTURE_LOC.toString();
-            else
-                this.structureId = structureId.trim();
-
-            if( structureId.contains(":") ) {
-                this.structureLoc = new ResourceLocation(structureId);
-            } else {
-                this.structureLoc = new ResourceLocation("minecraft", structureId);
-            }
-            includeEntities = false;
-            includeLoot = true;
-            this.upgradeStructureTrigger = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
-        }
-
-        public StructureConceptStage(int stage, String structureId, String trigger,  boolean addMobs, boolean addLoot) {
-            this(stage, structureId);
-            this.includeEntities = addMobs;
-            this.includeLoot = addLoot;
-            if(trigger != null && !trigger.isEmpty())
-                this.upgradeStructureTrigger = trigger;
-        }
-
-        // -- Getters --
-
-        public int getStage() {
-            return stage;
-        }
-
-        public String getStructureId() {
-            return structureId;
-        }
-
-        @Nullable
-        public ResourceLocation getStructureLoc() {
-            return structureLoc;
-        }
-
-        //include loot and mobs getters
-        public boolean isIncludeEntities() {
-            return includeEntities;
-        }
-
-        public boolean isIncludeLoot() {
-            return includeLoot;
-        }
-
-        public String getUpgradeStructureTrigger() {
-            return upgradeStructureTrigger;
-        }
-
-        /** Returns true if this stage has an actual structure to place. */
-        public boolean hasStructure() {
-            return !structureId.isEmpty() && !structureId.equals(ModConfig.EMPTY_STRUCTURE_LOC.toString());
-        }
-
-        public boolean is(ResourceLocation s) {
-            return structureLoc != null && s != null && structureLoc.equals(s);
-        }
-
-        /** Returns true if this stage explicitly removes / leaves empty. */
-        public boolean isEmpty() {
-            return structureId.equals(ModConfig.EMPTY_STRUCTURE_LOC.toString());
-        }
-
-        public boolean isSkip() {
-            return structureId.equals(ModConfig.SKIP_STRUCTURE_LOC.toString());
-        }
-
-        // -- Registry resolution --
-
-        /** Set the resolved Holder after registry lookup in ModConfig. */
-        public void setStructureLoc(ResourceLocation holder) {
-            this.structureLoc = holder;
-        }
-
-        // -- Serialization --
-
-        public JsonObject serialize() {
-            JsonObject obj = new JsonObject();
-            obj.addProperty("stage", stage);
-            obj.addProperty("structureId", structureId);
-            obj.addProperty("includeEntities", includeEntities);
-            obj.addProperty("includeLoot", includeLoot);
-            obj.addProperty("upgradeStructureTrigger", upgradeStructureTrigger);
-            return obj;
-        }
-
-        public static StructureConceptStage deserialize(JsonObject obj) {
-            int stage       = obj.has("stage")       ? obj.get("stage").getAsInt()         : 1;
-            String structId = obj.has("structureId") ? obj.get("structureId").getAsString() : "";
-            boolean addMobs = true;
-            boolean addLoot = true;
-            if( obj.has("includeEntities") ) addMobs = obj.get("includeEntities").getAsBoolean();
-            if( obj.has("includeLoot") ) addLoot = obj.get("includeLoot").getAsBoolean();
-
-            //get upgradeStructureTrigger
-            String upgradeTrigger = obj.has("upgradeStructureTrigger")
-                ? obj.get("upgradeStructureTrigger").getAsString()
-                : StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
-
-            //replace constant strings "empty" and "skip" with the config defaults if encountered in the trigger (for backward compatibility with old configs)
-            if(upgradeTrigger.equalsIgnoreCase("empty")) {
-                upgradeTrigger = ModConfig.EMPTY_STRUCTURE_LOC.toString();
-            } else if(upgradeTrigger.equalsIgnoreCase("skip")) {
-                upgradeTrigger = ModConfig.SKIP_STRUCTURE_LOC.toString();
-            }
-
-            return new StructureConceptStage(stage, structId, upgradeTrigger, addMobs, addLoot);
-        }
-    }
 
 
     //** Constructors **//
@@ -183,6 +64,8 @@ public class StructureConcept {
         this.stopUpgradeIfSpawnpointSet        = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeIfSpawnpointSet;
         this.stopUpgradeOnTotalChestCount      = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnTotalChestCount;
         this.stopUpgradeOnDaysSpentInStructure = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.stopUpgradeOnDaysSpentInStructure;
+        this.cycleStage                     = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.cycleStage;
+        this.unique                            = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.unique;
     }
 
     // Wide constructor delegates to the narrow one then overrides upgrade-stop flags
@@ -233,11 +116,23 @@ public class StructureConcept {
         return stopUpgradeOnDaysSpentInStructure;
     }
 
+    public int getCycleStage() { return cycleStage; }
+
+    public void setCycleStage(int cycleStage) { this.cycleStage = cycleStage; }
+
+    public boolean isUnique() {
+        return unique;
+    }
+
+    public void setUnique(boolean unique) {
+        this.unique = unique;
+    }
+
     @Nullable
     private Object getStructureUpgradeTrigger(int stageNo) {
         StructureConceptStage stage = getStage(stageNo);
         if (stage == null) return null;
-        return parseTrigger( stage.upgradeStructureTrigger );
+        return parseTrigger( stage.getUpgradeStructureTrigger() );
     }
 
 
@@ -267,22 +162,45 @@ public class StructureConcept {
     private static final String CRASHOUT = "The default structure upgrade trigger is not a valid integer, item or dimension. Please edit hbs_structures-common to set a valid default trigger.";
 
     @Nullable
-    public Item getStructureUpgradeItem(int stage) {
-        Object trigger = getStructureUpgradeTrigger(stage);
-        return (trigger instanceof Item) ? (Item) trigger : null;
+    public Item getStructureUpgradeItem(int s) {
+        StructureConceptStage stage = getStage(s);
+        if (stage == null) return null;
+        return stage.getUpgradeStructureOnItemTrigger();
     }
 
     @Nullable
-    public Level getStructureUpgradeDimension(int stage) {
-        Object trigger = getStructureUpgradeTrigger(stage);
-        return (trigger instanceof Level) ? (Level) trigger : null;
+    public ResourceKey<Level> getStructureUpgradeDimension(int s) {
+        StructureConceptStage stage = getStage(s);
+        if (stage == null) return null;
+        return stage.getUpgradeStructureOnDimensionTrigger();
     }
 
     @Nullable
-    public Integer getStructureUpgradeDays(int stage) {
-        if(this.getStageCount()<stage) return null;
-        Object trigger = getStructureUpgradeTrigger(stage);
-        return (trigger instanceof Integer) ? (Integer) trigger : null;
+    public Long getStructureUpgradeDays(int s) {
+        StructureConceptStage stage = getStage(s);
+        if (stage == null) return null;
+        return stage.getUpgradeStructureOnDayCount();
+    }
+
+    @Nullable
+    public Long getStructureUpgradeDayCycle(int s) {
+        StructureConceptStage stage = getStage(s);
+        if (stage == null) return null;
+        return stage.getUpgradeStructureOnDayCycle();
+    }
+
+    @Nullable
+    public Map<EntityType<?>, Integer> getStructureUpgradeMobsKilled(int s) {
+        StructureConceptStage stage = getStage(s);
+        if (stage == null) return null;
+        return stage.getUpgradeStructureOnMobsKilled();
+    }
+
+    @Nullable
+    public Map<EntityType<?>, Integer> getStructureUpgradeTotalEntities(int s) {
+        StructureConceptStage stage = getStage(s);
+        if (stage == null) return null;
+        return stage.getUpgradeStructureOnTotalEntities();
     }
 
     @Nullable
@@ -320,12 +238,14 @@ public class StructureConcept {
 
     /**
      * Returns the stage entry matching the given stage number, or null if not defined.
-     * Stage numbers are 1-indexed (stage 1 = canvas1, stage 2 = canvas2, etc.).
+     * Stage numbers are 0-indexed (stage 1 = canvas1, stage 2 = canvas2, etc.).
+     * 0 is the structure that spawns initially in the world
      */
     @Nullable
     public StructureConceptStage getStage(int stageNumber) {
         if( stageNumber < 0 ) return  new StructureConceptStage(-1, ModConfig.EMPTY_STRUCTURE_LOC.toString());
         StructureConceptStage result = new StructureConceptStage(stageNumber, ModConfig.SKIP_STRUCTURE_LOC.toString());
+        if(cycleStage!=-1 && stageNumber==getMaxStage()+1) stageNumber=cycleStage;
         for (StructureConceptStage s : stages) {
             if (s.getStage() == stageNumber) result = s;
         }
@@ -375,6 +295,8 @@ public class StructureConcept {
         obj.addProperty("stopUpgradeIfSpawnpointSet", stopUpgradeIfSpawnpointSet);
         obj.addProperty("stopUpgradeOnTotalChestCount", stopUpgradeOnTotalChestCount);
         obj.addProperty("stopUpgradeOnDaysSpentInStructure", stopUpgradeOnDaysSpentInStructure);
+        obj.addProperty("cycleStage", cycleStage);
+        obj.addProperty("unique", unique);
 
         JsonArray stagesArray = new JsonArray();
         for (StructureConceptStage stage : stages) {
@@ -414,7 +336,10 @@ public class StructureConcept {
             }
         }
 
-        return new StructureConcept(conceptId, sourceId, comments, stages,
+        StructureConcept concept = new StructureConcept(conceptId, sourceId, comments, stages,
             stopSpawn, stopChest, stopDays);
+        if (obj.has("cycleUpgrades")) concept.setCycleStage(obj.get("cycleUpgrades").getAsInt());
+        if (obj.has("unique")) concept.setUnique(obj.get("unique").getAsBoolean());
+        return concept;
     }
 }

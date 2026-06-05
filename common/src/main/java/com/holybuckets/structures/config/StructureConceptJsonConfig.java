@@ -1,10 +1,9 @@
 package com.holybuckets.structures.config;
 
 import com.google.gson.*;
-import com.google.gson.stream.MalformedJsonException;
 import com.holybuckets.foundation.modelInterface.IStringSerializable;
-import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.model.StructureConcept;
+import com.holybuckets.structures.config.model.StructureConceptStage;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -114,11 +113,11 @@ public class StructureConceptJsonConfig implements IStringSerializable {
         List<StructureConcept> concepts = new ArrayList<>();
 
         // village: witch hut → village → (empty) → pillager outpost
-        List<StructureConcept.StructureConceptStage> villageStages = List.of(
-            new StructureConcept.StructureConceptStage(0, "minecraft:swamp_hut", "32", false, true),
-            new StructureConcept.StructureConceptStage(1, "minecraft:village_plains", "the_nether", true, true),
-            new StructureConcept.StructureConceptStage(2, EMPTY_STRUCTURE_LOC.toString() , "the_end", false, true),
-            new StructureConcept.StructureConceptStage(3, "minecraft:pillager_outpost", "32", true, true)
+        List<StructureConceptStage> villageStages = List.of(
+            new StructureConceptStage(0, "minecraft:swamp_hut", "32", false, true),
+            new StructureConceptStage(1, "minecraft:village_plains", "the_nether", true, true),
+            new StructureConceptStage(2, EMPTY_STRUCTURE_LOC.toString() , "the_end", false, true),
+            new StructureConceptStage(3, "minecraft:pillager_outpost", "32", true, true)
         );
         concepts.add(new StructureConcept(
             "village",
@@ -131,9 +130,9 @@ public class StructureConceptJsonConfig implements IStringSerializable {
         ));
 
         // vanishingShip: shipwreck → empty
-        List<StructureConcept.StructureConceptStage> shipStages = List.of(
-            new StructureConcept.StructureConceptStage(0, "minecraft:shipwreck", "32", false, true),
-            new StructureConcept.StructureConceptStage(1, "", "32", false, true)
+        List<StructureConceptStage> shipStages = List.of(
+            new StructureConceptStage(0, "minecraft:shipwreck", "32", false, true),
+            new StructureConceptStage(1, "", "32", false, true)
         );
         concepts.add(new StructureConcept(
             "vanishingShip",

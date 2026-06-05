@@ -6,7 +6,6 @@ import net.blay09.mods.balm.api.config.reflection.Config;
 import net.blay09.mods.balm.api.config.reflection.NestedType;
 
 import java.util.List;
-import java.util.Set;
 
 
 @Config(Constants.MOD_ID)
@@ -86,6 +85,15 @@ public class StructuresTimeConfig {
 
         @Comment("Default upgradeStructureTrigger: 32. By default a structure will upgrade to its next stage after 32 days. You can change this number, set it to an item or dimension name. This setting only changes the default value; edit the value(s) in HBStructuresConceptConfig.json to change it for each structure and stage.")
         public String upgradeStructureTrigger = "32";
+
+        @Comment("Default cycleStage: -1. A structure will 'cycle back' to this stage after its last stage")
+        public int cycleStage = -1;
+
+        @Comment("Default removeEntities: false. If true, entities in the structure area are removed when a stage ends.")
+        public boolean removeEntities = false;
+
+        @Comment("Default unique: false. If true, only one instance of this structure concept may exist in the world at a time. Chosen at random out of all available options.")
+        public boolean unique = false;
 
     }
 

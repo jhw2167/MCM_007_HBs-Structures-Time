@@ -56,6 +56,18 @@ To Do:
 7. API support for intentional structure upgrades
 
 
+//On structureConcept
+"cycleUpgrades": true, //boolean field that makes structures loop back to the 0th stage after final stage
+
+//on StructureStage
+upgradeStructureOnItemTrigger: "cataclysm:cursed_eye" //a player holding the item triggers next upgrade in structure
+upgradeStructureOnDimensionTrigger: "minecraft:the_nether" //a player traveling to a new dimension triggers the upgrade
+upgradeStructureOnDayCount: "20" //after the number of days in the world, all structures of this type upgrade
+upgradeStructureOnDayCycle: "morning" //morning, noon, evening, midnight
+upgradeStructureOnMobsKilled: "<entityType>,<kill_count>", //"minecraf:creeper,20", when entities are killed locally
+upgradeStructureOnTotalEntities: "<entityType>,<total_count>", //"minecraf:creeper,20", when entities are in the area
+removeEntitiesAfterStage: true, //we will attempt to remove entities in the area when this structure is ending
+
 
 
 

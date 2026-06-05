@@ -13,6 +13,7 @@ import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.StructuresOverTimeMain;
 import com.holybuckets.structures.config.ModConfig;
 import com.holybuckets.structures.config.model.StructureConcept;
+import com.holybuckets.structures.config.model.StructureConceptStage;
 import com.holybuckets.structures.mixin.SinglePoolElementAccessor;
 import com.holybuckets.structures.mixin.StructureTemplateAccessor;
 import com.holybuckets.structures.mixin.TemplateStructurePieceAccessor;
@@ -38,6 +39,7 @@ import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -56,6 +58,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     private static final String CLASS_ID = "010";
     private static final String NBT_KEY_HEADER = "managedTimedStructureChunk";
+    private static final int ENTITY_AREA_RANGE = 16; //chunks
 
     public static ModConfig MOD_CONFIG;
     public static GeneralConfig GENERAL_CONFIG;
@@ -99,6 +102,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     private int countTotalWakeups;
     private int upgradeRejectedStatus;
+    private int localEntityKillCount; //kills of the configured upgrade entity within this chunk's area
 
     /** Constructors **/
 
@@ -290,7 +294,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         for (int s = 0; s <= structureConcept.getStages().size(); s++)
         {
-            StructureConcept.StructureConceptStage conceptStage = structureConcept.getStage(s);
+            StructureConceptStage conceptStage = structureConcept.getStage(s);
             if (conceptStage == null || conceptStage.isEmpty()) continue;
 
             Structure mcStructure = MOD_CONFIG.structure(conceptStage.getStructureLoc());
@@ -319,7 +323,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         }
 
         if (structureStarts.isEmpty()) return;
-        for (StructureConcept.StructureConceptStage stage : structureConcept.getStages()) {
+        for (StructureConceptStage stage : structureConcept.getStages()) {
             Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
             StructureStart start = structureStarts.getOrDefault(s, sStart);
             BoundingBox bb = start.getBoundingBox();
@@ -381,7 +385,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if (!(chunk instanceof LevelChunk)) return;
 
         //2. Check if Structure is available
-        StructureConcept.StructureConceptStage newConcept = structureConcept.getStage(newStage);
+        StructureConceptStage newConcept = structureConcept.getStage(newStage);
         if (newConcept == null) {
             this.stage = newStage;
             return;
@@ -600,6 +604,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 phase = UpgradePhase.TERRAIN;
                 chunkIndex = 0;
                 this.stage = pendingStage;
+                this.localEntityKillCount = 0; //reset kill tally for the new stage's trigger
                 currentStructureStart = structureStarts.get(currentStructure);
                 if(currentStructure != null && currentStructureStart != null) {
                     chunk.setStartForStructure(currentStructure, currentStructureStart);
@@ -785,7 +790,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     private void warnPlayersOfStructureUpgrade() {
         if (structureConcept == null || getChunk()==null) return;
-        if(StructuresOverTimeMain.CONFIG.enableStructureUpgradeWarning) {
+        if(StructuresOverTimeMain.CONFIG.enableStructureUpgradeWarning)
+        {
             List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(getChunk(), 34);
             String strDetails = getStructureDetails();
             nearbyPlayers.forEach(p -> Messager.getInstance().sendChat(p,
@@ -875,6 +881,44 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if(!list.isEmpty()) countTotalWakeups++;
     }
 
+    //16-chunk-radius box around the center chunk used for entity kill/count conditions
+    private BoundingBox getEntityArea() {
+        if (level == null || pos == null) return null;
+        int minX = (pos.x - ENTITY_AREA_RANGE) << 4;
+        int minZ = (pos.z - ENTITY_AREA_RANGE) << 4;
+        int maxX = ((pos.x + ENTITY_AREA_RANGE) << 4) + 15;
+        int maxZ = ((pos.z + ENTITY_AREA_RANGE) << 4) + 15;
+        return new BoundingBox(minX, level.getMinBuildHeight(), minZ, maxX, level.getMaxBuildHeight(), maxZ);
+    }
+
+    public boolean isInEntityArea(BlockPos p) {
+        BoundingBox area = getEntityArea();
+        return area != null && area.isInside(p);
+    }
+
+    //increments the local kill tally when a configured upgrade entity dies in this area
+    public void onEntityKilledInArea(EntityType<?> deadType) {
+        if (structureConcept == null) return;
+        StructureConceptStage next = structureConcept.getStage(stage + 1);
+        if (next == null) return;
+        Map<EntityType<?>, Integer> killCfg = next.getUpgradeStructureOnMobsKilled();
+        if (killCfg == null || !killCfg.containsKey(deadType)) return;
+        localEntityKillCount++;
+    }
+
+    public boolean testKillLocalEntities(EntityType<?> mob, int count) {
+        return localEntityKillCount >= count;
+    }
+
+    //counts live entities of the given type in the area in real time
+    public boolean testCountLocalEntities(EntityType<?> mob, int count) {
+        if (level == null) return false;
+        BoundingBox area = getEntityArea();
+        if (area == null) return false;
+        int found = level.getEntitiesOfClass(Entity.class, AABB.of(area), e -> e.getType() == mob).size();
+        return found >= count;
+    }
+
     private LevelChunk getChunk() {
         if (chunk != null) return chunk;
         if (getParent() != null) {
@@ -900,6 +944,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         }
 
         tag.putInt("upgradeRejectedStatus", this.upgradeRejectedStatus);
+        tag.putInt("localEntityKillCount", this.localEntityKillCount);
 
         tag.putString("structure", structureConcept.getStructureConceptId());
 
@@ -943,6 +988,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         if(tag.contains("upgradeRejectedStatus")) {
             this.upgradeRejectedStatus = tag.getInt("upgradeRejectedStatus");
+        }
+
+        if(tag.contains("localEntityKillCount")) {
+            this.localEntityKillCount = tag.getInt("localEntityKillCount");
         }
 
         // Deserialize structure starts using vanilla StructureStart.loadStaticStart
