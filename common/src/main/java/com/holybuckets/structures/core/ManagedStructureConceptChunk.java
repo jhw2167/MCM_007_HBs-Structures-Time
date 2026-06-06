@@ -300,18 +300,11 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         for (int s = 0; s <= structureConcept.getStages().size(); s++)
         {
             StructureConceptStage conceptStage = structureConcept.getStage(s);
-            if (conceptStage == null || conceptStage.isEmpty()) continue;
+            if (conceptStage == null || conceptStage.isEmptyStruct() || conceptStage.isSkipStruct()) continue;
 
             Structure mcStructure = MOD_CONFIG.structure(conceptStage.getStructureLoc());
             if (mcStructure == null) continue;
-
-            if (mcStructure == ModConfig.EMPTY_STRUCT) {
-                structureStarts.put(mcStructure, sStart);
-                continue;
-            }
-            if (structureStarts.get(mcStructure) != null) {
-                continue;
-            }
+            if (structureStarts.containsKey(mcStructure)) continue;
 
             Optional<Structure.GenerationStub> stub = mcStructure.findValidGenerationPoint(ctx);
             if (stub.isEmpty()) continue;
@@ -403,9 +396,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         }
 
         //only skip an empty transition when the ending stage had no structure to clear
-        ResourceLocation endingStructLoc = structureConcept.getStage(this.stage).getStructureLoc();
-        if (MOD_CONFIG.isEmptyStructure(strLoc)
-            && (MOD_CONFIG.isEmptyStructure(endingStructLoc) || MOD_CONFIG.isSkipStructure(endingStructLoc))) {
+        ResourceLocation prevStructLoc = structureConcept.getStage(this.stage).getStructureLoc();
+        if (MOD_CONFIG.isEmptyStructure(strLoc) && MOD_CONFIG.isEmptyStructure(prevStructLoc) ) {
             this.stage = newStage;
             return;
         }
@@ -413,14 +405,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         //Empty structures are processed to clear the land as well
         currentStructure = MOD_CONFIG.structure(newConcept.getStructureLoc());
 
-        //remove entities spawned by the ending stage if it is configured to do so
-        if (structureConcept.getStage(this.stage).isRemoveEntitiesAfterStage()) {
-            clearSpawnedEntities();
-        }
-
-
         //3. Obtain all old chunksPos for clearing
-        ResourceLocation prevStructLoc = structureConcept.getStage(this.stage).getStructureLoc();
         oldStructureArea.clear();
         newStructureArea.clear();
         if(!MOD_CONFIG.isEmptyStructure(prevStructLoc) && !MOD_CONFIG.isSkipStructure(prevStructLoc) )
@@ -514,7 +499,9 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             case DECORATE:
                 // One batch call — only touches proto chunks in RAM
                 var starts = new HashMap();
-                starts.put(currentStructure, structureStarts.get(currentStructure));
+                if(structureStarts.get(currentStructure) != null) {
+                    starts.put(currentStructure, structureStarts.get(currentStructure));
+                }
                 try {
                     boolean success = ChunkRegenerator.applyDecorationBatch(level, affectedUpgradeChunks,
                  starts, currentBox);
@@ -555,6 +542,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 break;
 
             case COPY_MOBS:
+
+                //remove entities spawned by the ending stage if it is configured to do so
+                if (structureConcept.getStage(stage).isRemoveEntitiesAfterStage()) {
+                    clearSpawnedEntities();
+                }
+
                 if(!structureConcept.getStage(stage).isIncludeEntities()) {
                     //nothing
                 } else {

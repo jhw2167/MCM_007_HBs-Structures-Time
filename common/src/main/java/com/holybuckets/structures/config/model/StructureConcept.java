@@ -219,7 +219,7 @@ public class StructureConcept {
     }
 
     public List<StructureConceptStage> getStagesNoSkips() {
-        return stages.stream().filter(s -> !s.isSkip()).toList();
+        return stages.stream().filter(s -> !s.isSkipStruct()).toList();
     }
 
     /** Returns the number of stages defined for this concept. */

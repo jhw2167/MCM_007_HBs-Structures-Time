@@ -137,7 +137,7 @@ public class ChunkRegenerator {
 
             // Pad by 5 on each side: decoration can write ~2 chunks out from center,
             // plus 1 read-only border, plus safety margin for large features (trees)
-            int C = 5;
+            int C = 3;
             minX -= C;
             maxX += C;
             minZ -= C;
@@ -171,11 +171,15 @@ public class ChunkRegenerator {
             WorldGenRegion region = new WorldGenRegion(level, regionChunks, ChunkStatus.FEATURES, writeRadius);
 
             // 5. Set structure starts + references on all proto chunks
-            for (ProtoChunk proto : CHUNK_CACHE.values()) {
-                proto.setAllStarts(starts);
-                starts.forEach((s, start) ->
-                    proto.addReferenceForStructure(s, start.getChunkPos().toLong()));
+            if(!starts.isEmpty())
+            {
+                for (ProtoChunk proto : CHUNK_CACHE.values()) {
+                    proto.setAllStarts(starts);
+                    starts.forEach((s, start) ->
+                        proto.addReferenceForStructure(s, start.getChunkPos().toLong()));
+                }
             }
+
 
             // 6. Decorate only the requested chunks
             for (ChunkPos cp : chunksToDecorate) {

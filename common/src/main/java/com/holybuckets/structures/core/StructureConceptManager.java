@@ -252,7 +252,7 @@ public class StructureConceptManager {
         for(ManagedStructureConceptChunk chunk : managedChunks.values()) {
             StructureConcept concept = chunk.getStructureConcept();
             if(concept == null) continue;
-            //checkEntityTriggers(chunk);
+            checkEntityTriggers(chunk);
             checkDaylightTriggers(concept, daylight);
         }
 
@@ -580,7 +580,7 @@ public class StructureConceptManager {
 
 
     private static void onLevelLoad(LevelLoadingEvent.Load event) {
-        if(true) return;
+        //if(true) return; ///debug
         if (event.getLevel().isClientSide()) return;
 
         if(MANAGERS.containsKey(event.getLevel())) return;

@@ -4,16 +4,12 @@ import com.google.gson.JsonObject;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.structures.StructuresOverTimeMain;
 import com.holybuckets.structures.config.ModConfig;
-import net.minecraft.core.Registry;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.dimension.DimensionType;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -201,11 +197,11 @@ public class StructureConceptStage {
     }
 
     /** Returns true if this stage explicitly removes / leaves empty. */
-    public boolean isEmpty() {
+    public boolean isEmptyStruct() {
         return structureId.equals(ModConfig.EMPTY_STRUCTURE_LOC.toString());
     }
 
-    public boolean isSkip() {
+    public boolean isSkipStruct() {
         return structureId.equals(ModConfig.SKIP_STRUCTURE_LOC.toString());
     }
 
