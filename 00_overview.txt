@@ -70,6 +70,40 @@ removeEntitiesAfterStage: true, //we will attempt to remove entities in the area
 
 
 
+Ways to scan for nice looking areas:
+
+sample y value of top solid block:
+
+int sampleStep = 4; // tune based on structure size
+int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+boolean hasWater = false;
+
+for (int x = boundingBox.minX(); x <= boundingBox.maxX(); x += sampleStep) {
+    for (int z = boundingBox.minZ(); z <= boundingBox.maxZ(); z += sampleStep) {
+        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+        BlockState below = level.getBlockState(new BlockPos(x, y - 1, z));
+
+        if (below.is(Blocks.WATER) || below.is(Blocks.LAVA)) hasWater = true;
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+    }
+}
+
+int variance = maxY - minY;
+boolean suitable = !hasWater && variance <= MAX_ALLOWED_VARIANCE;
+
+2.
+----
+
+Sample averages over a bowl shape to determine validity:
+
+// If center avg and perimeter avg diverge significantly, 
+// the terrain is bowled or peaked rather than flat.
+boolean isBowled = Math.abs(centerAvgY - perimeterAvgY) > BOWL_THRESHOLD;
+
+
+
+
 
 
 Some integrated Structures:

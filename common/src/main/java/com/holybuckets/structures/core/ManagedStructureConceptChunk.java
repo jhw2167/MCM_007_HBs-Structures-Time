@@ -863,7 +863,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
          "\nChunk: %s" +
          "\nPosition: %s" +
          "\nCurrent Stage: %d" +
-         "\nIs Pending Upgrade: %s" +
+         "\nPending Upgrade: %s" +
           "\nNext upgrade trigger: %s" +
           "\nNext structure: %s" +
           "\nUpgrade Rejection Status: %d" +
@@ -873,7 +873,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             id,
             BlockUtil.positionToString( pos.getWorldPosition() ),
             stage,
-            pendingUpgrade,
+            phase.toString(),
             upgradeTrigger,
             nextStructureId,
             upgradeRejectedStatus,
@@ -889,13 +889,13 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if(!list.isEmpty()) countTotalWakeups++;
     }
 
-    public boolean isInEntityArea(BlockPos p) {
+    private boolean isInEntityArea(BlockPos p) {
         return entityBox.isInside(p);
     }
 
     //increments the local kill tally when a configured upgrade entity dies in this area
-    public void onEntityKilledInArea(EntityType<?> deadType) {
-        localEntityKillCount++;
+    public void onEntityKilledInArea(BlockPos pos) {
+        if(isInEntityArea(pos)) localEntityKillCount++;
     }
 
     public boolean testKillLocalEntities(EntityType<?> mob, int count) {
