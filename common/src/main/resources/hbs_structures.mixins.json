@@ -3,10 +3,11 @@
     "minVersion": "0.8",
     "package": "${group}.mixin",
     "refmap": "${mod_id}.refmap.json",
-    "compatibilityLevel": "JAVA_17",
+    "compatibilityLevel": "JAVA_21",
     "mixins": [
         "ChunkAccessAccessor",
         "ChunkAccessMixin",
+        "NoiseBasedChunkGeneratorInvoker",
         "PoolElementStructurePieceAccessor",
         "SinglePoolElementAccessor",
         "StructureCheckMixin",

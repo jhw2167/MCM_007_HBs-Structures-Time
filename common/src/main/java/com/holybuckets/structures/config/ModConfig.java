@@ -150,13 +150,13 @@ public class ModConfig {
         if(resourceLocationStr.equalsIgnoreCase("skip")) return EMPTY_STRUCTURE_LOC;
         if(resourceLocationStr.equalsIgnoreCase("empty")) return EMPTY_STRUCTURE_LOC;
 
-        ResourceLocation loc = new ResourceLocation(resourceLocationStr);
+        ResourceLocation loc = ResourceLocation.parse(resourceLocationStr);
         Structure s = registry.getOptional(loc).orElse(null);
         return (s != null) ? loc : null;
     }
 
-    public static final ResourceLocation EMPTY_STRUCTURE_LOC = new ResourceLocation(Constants.MOD_ID, "empty");
-    public static final ResourceLocation SKIP_STRUCTURE_LOC = new ResourceLocation(Constants.MOD_ID, "skip");
+    public static final ResourceLocation EMPTY_STRUCTURE_LOC = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "empty");
+    public static final ResourceLocation SKIP_STRUCTURE_LOC = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "skip");
 
     /** Default structure instance indicating the previous structure should be removed **/
     public static Structure EMPTY_STRUCT;

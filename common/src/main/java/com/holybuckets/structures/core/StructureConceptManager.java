@@ -38,7 +38,6 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.RandomState;
@@ -69,13 +68,14 @@ public class StructureConceptManager {
 
     private final ServerLevel level;
     private final Registry<Structure> registry;
+    private final Set<ChunkAccess> protochunkCache;
     private final Map<ChunkPos, ManagedStructureConceptChunk> managedChunks;
     private final Map<EntityType<?>, Set<ManagedStructureConceptChunk>> mobTrackingChunks = new HashMap<>();
     private static int globalStage=0;
 
 
     //** STATICS
-    static Map<LevelAccessor, StructureConceptManager> MANAGERS = new HashMap<>();
+    static Map<ResourceKey<Level>, StructureConceptManager> MANAGERS = new HashMap<>();
     static ModConfig MOD_CONFIG;
     static GeneralConfig GENERAL_CONFIG;
     static Map<String, BlockPos> playerSpawnPos = new HashMap<>();
@@ -89,7 +89,7 @@ public class StructureConceptManager {
         this.level = level;
         this.registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         this.managedChunks = new HashMap<>();
-        MANAGERS.put(level, this);
+        this.protochunkCache = new HashSet<>();
         LoggerProject.logInit("011000", StructureConceptManager.class.getName());
     }
 
@@ -112,19 +112,19 @@ public class StructureConceptManager {
         return managedChunks.get(chunkId);
     }
 
-    public static ManagedStructureConceptChunk getManagedChunk(LevelAccessor level, ChunkPos cp) {
-        StructureConceptManager manager = MANAGERS.get(level);
+    public static ManagedStructureConceptChunk getManagedChunk(Level level, ChunkPos cp) {
+        StructureConceptManager manager = MANAGERS.get(level.dimension());
         if (manager == null) return null;
         return manager.managedChunks.get(cp);
     }
 
     @Nullable
-    public static StructureConceptManager get(LevelAccessor level) {
-        return MANAGERS.get(level);
+    public static StructureConceptManager get(Level level) {
+        return MANAGERS.get(level.dimension());
     }
 
     public static void addManagedChunk(ServerLevel level, ManagedStructureConceptChunk managedStructureConceptChunk) {
-        StructureConceptManager manager = MANAGERS.get(level);
+        StructureConceptManager manager = MANAGERS.get(level.dimension());
         if (manager != null) {
             manager.managedChunks.put(managedStructureConceptChunk.getChunkPos(), managedStructureConceptChunk);
         }
@@ -174,7 +174,7 @@ public class StructureConceptManager {
 
 
     //** CORE
-    public boolean isManagedChunk(ChunkPos chunkPos) {
+    public boolean hasManagedStructure(ChunkPos chunkPos) {
         return managedChunks.containsKey(chunkPos);
     }
     /** Returns true if the structure at this chunk position is managed and should be hidden from vanilla.
@@ -201,7 +201,7 @@ public class StructureConceptManager {
     }
 
     public static void setGlobalStage(Level level, int stage) {
-        StructureConceptManager manager = MANAGERS.get(level);
+        StructureConceptManager manager = MANAGERS.get(level.dimension());
         if (manager != null) {
             manager.setManagerStage(stage);
         }
@@ -235,6 +235,7 @@ public class StructureConceptManager {
         ManagedStructureConceptChunk managed = new ManagedStructureConceptChunk(
         level, cp, ctx, globalStage);
         managedChunks.put(cp, managed);
+        protochunkCache.add((ChunkAccess) ctx.structureAccess);
 
 
         LoggerProject.logDebug("011020", "Registered timed structure chunk: " + cp);
@@ -530,9 +531,10 @@ public class StructureConceptManager {
 
     //** STATICS:
 
-    public static boolean isManagedChunk(ServerLevel level, ChunkPos pos) {
+    public static boolean hasManagedStructure(ServerLevel level, ChunkPos pos) {
         if(level.isClientSide()) return false;
-        StructureConceptManager manager = MANAGERS.get(level);
+        level.getChunkSource().chunkMap.getChunkDebugData(pos);
+        StructureConceptManager manager = MANAGERS.get(level.dimension());
         if (manager == null) return false;
         return manager.managedChunks.containsKey(pos);
     }
@@ -587,13 +589,12 @@ public class StructureConceptManager {
 
     private static void onLevelLoad(LevelLoadingEvent.Load event) {
         //if(true) return; ///debug
-        if (event.getLevel().isClientSide()) return;
+        if ( !(event.getLevel() instanceof ServerLevel level)) return;
 
-        if(MANAGERS.containsKey(event.getLevel())) return;
-        MANAGERS.put(event.getLevel(), new StructureConceptManager((ServerLevel) event.getLevel()));
-
-        if (event.getLevel()!=GENERAL_CONFIG.OVERWORLD) return;
-        StructureConceptManager.load(GeneralConfig.getInstance().getDataStore());
+        if(!MANAGERS.containsKey(level.dimension())) {
+            MANAGERS.put(level.dimension(), new StructureConceptManager((ServerLevel) event.getLevel()));
+            StructureConceptManager.load(GeneralConfig.getInstance().getDataStore());
+        }
     }
 
 
@@ -603,8 +604,8 @@ public class StructureConceptManager {
         ServerLevel serverLevel = (ServerLevel) event.getLevel();
         if (!serverLevel.dimension().equals(Level.OVERWORLD)) return;
 
-        StructureConceptManager manager = MANAGERS.get(serverLevel);
-        if (manager != null && manager.isManagedChunk(event.getChunkPos())) {
+        StructureConceptManager manager = MANAGERS.get(serverLevel.dimension());
+        if (manager != null && manager.hasManagedStructure(event.getChunkPos())) {
             manager.handleChunkLoad(event);
         }
     }
@@ -655,24 +656,21 @@ public class StructureConceptManager {
     }
 
     public static void onTryGenerateStructure(StructureGenerateContext ctx) {
-        for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
-            LevelAccessor levelAccessor = entry.getKey();
-            if (levelAccessor instanceof ServerLevel serverLevel) {
-                //entry.getValue().handleTryGenerateStructure(ctx);
-                return;
-            }
+        for (Map.Entry<ResourceKey<Level>, StructureConceptManager> entry : MANAGERS.entrySet()) {
+            //entry.getValue().handleTryGenerateStructure(ctx);
+            return;
         }
     }
 
     public static void onSetStartForStructure(StructureSetStartContext ctx) {
-        StructureConceptManager manager = MANAGERS.get(ctx.serverLevel);
+        StructureConceptManager manager = MANAGERS.get(ctx.serverLevel.dimension());
         if (manager != null) {
             manager.handleSetStartForStructure(ctx);
         }
     }
 
     public static void onStructureLoad(ChunkPos chunkPos, Map<Structure, StructureStart> structureStarts) {
-        for (Map.Entry<LevelAccessor, StructureConceptManager> entry : MANAGERS.entrySet()) {
+        for (Map.Entry<ResourceKey<Level>, StructureConceptManager> entry : MANAGERS.entrySet()) {
                 //entry.getValue().handleStructureLoad(chunkPos, structureStarts);
         }
     }
@@ -687,6 +685,25 @@ public class StructureConceptManager {
         return managedChunks.get(chunkPos).getCurrentStarts();
     }
 
+
+    /**
+     * Should always be proto chunk since this fires on getAllStarts for chunks before they are full LevelChunks
+     */
+    public static StructureConceptManager getCachedManager(ChunkAccess me) {
+        //loop over all managers check against protoChunkCache set
+        for(StructureConceptManager manager : MANAGERS.values()) {
+            if(manager.protochunkCache.contains(me)) return manager;
+        }
+        if(ChunkRegenerator.cacheContains(me)) {
+            Level lvl = ChunkRegenerator.getVirtualLevel();
+            if(lvl!=null) return MANAGERS.get(lvl.dimension());
+        }
+        return null;
+    }
+
+    public void removeCachedProtochunk(ChunkAccess me) {
+        protochunkCache.remove(me);
+    }
 
     //** INNER CLASSSES **/
 

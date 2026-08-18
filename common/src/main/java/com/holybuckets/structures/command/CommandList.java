@@ -187,8 +187,7 @@ public class CommandList {
             source.sendSuccess(() -> Component.literal("Regenerating chunk at " + chunkPos + "..."), true);
 
             try {
-                ProtoChunk chunk = ChunkRegenerator.createProtoChunk(level, chunkPos);
-                boolean success = ChunkRegenerator.regenerateChunk(chunk, level, chunkPos);
+                var success =false;
                 if (success) {
                     source.sendSuccess(() -> Component.literal("Chunk " + chunkPos + " regenerated."), true);
                     return 1;

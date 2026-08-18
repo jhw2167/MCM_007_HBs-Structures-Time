@@ -3,6 +3,7 @@ package com.holybuckets.structures.mixin;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
+import net.minecraft.world.level.levelgen.structure.templatesystem.LiquidSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
@@ -17,5 +18,5 @@ public interface SinglePoolElementAccessor {
     StructureTemplate invokeGetTemplate(StructureTemplateManager m);
 
     @Invoker("getSettings")
-    StructurePlaceSettings invokeGetSettings(Rotation rotation, BoundingBox boundingBox, boolean offset);
+    StructurePlaceSettings invokeGetSettings(Rotation rotation, BoundingBox boundingBox, LiquidSettings liquidSettings, boolean offset);
 }

@@ -7,7 +7,7 @@ public class ModRenderers {
     //public static ModelLayerLocation someModel;
 
     public static void clientInitialize(BalmRenderers renderers) {
-        //waystoneModel = renderers.registerModel(new ResourceLocation(Waystones.MOD_ID, "waystone"), () -> WaystoneModel.createLayer(CubeDeformation.NONE));
+        //waystoneModel = renderers.registerModel(ResourceLocation.fromNamespaceAndPath(Waystones.MOD_ID, "waystone"), () -> WaystoneModel.createLayer(CubeDeformation.NONE));
         //renderers.setBlockRenderType(() -> ModBlocks.stoneBrickBlockEntity, RenderType.cutout());
     }
 

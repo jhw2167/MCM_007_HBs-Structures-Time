@@ -21,7 +21,7 @@ public class CountingChestScreen extends AbstractContainerScreen<TemplateChestEn
 
     // Path to your custom GUI texture (adjust path to your mod's namespace)
     private static final ResourceLocation TEXTURE =
-        new ResourceLocation(Constants.MOD_ID, "textures/gui/challenge_chest_counting_gui.png");
+        ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/challenge_chest_counting_gui.png");
 
     public static int INV_HEIGHT = 170;
     public static int INV_WIDTH = 176;
@@ -49,7 +49,7 @@ public class CountingChestScreen extends AbstractContainerScreen<TemplateChestEn
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(graphics);
+        this.renderBackground(graphics, mouseX, mouseY, partialTick);
         super.render(graphics, mouseX, mouseY, partialTick);
         this.renderTooltip(graphics, mouseX, mouseY);
     }

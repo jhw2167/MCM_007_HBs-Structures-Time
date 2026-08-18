@@ -1,0 +1,18 @@
+package com.holybuckets.structures;
+
+import com.holybuckets.structures.client.CommonClassClient;
+import net.blay09.mods.balm.api.client.BalmClient;
+import net.blay09.mods.balm.neoforge.NeoForgeLoadContext;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
+
+@Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
+public class StructuresOverTimeMainForgeClient {
+
+    public StructuresOverTimeMainForgeClient(IEventBus modEventBus) {
+        final var context = new NeoForgeLoadContext(modEventBus);
+        BalmClient.initialize(Constants.MOD_ID, context, CommonClassClient::initClient);
+    }
+
+}

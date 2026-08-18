@@ -52,9 +52,9 @@ public class StructureConceptStage {
             this.structureId = structureId.trim();
 
         if( structureId.contains(":") ) {
-            this.structureLoc = new ResourceLocation(structureId);
+            this.structureLoc = ResourceLocation.parse(structureId);
         } else {
-            this.structureLoc = new ResourceLocation("minecraft", structureId);
+            this.structureLoc = ResourceLocation.fromNamespaceAndPath("minecraft", structureId);
         }
         includeEntities = false;
         includeLoot = true;
@@ -148,7 +148,7 @@ public class StructureConceptStage {
             upgradeStructureOnItemTrigger = HBUtil.ItemUtil.itemNameToItem(upgradeStructureOnItemTriggerRaw);
         if (notBlank(upgradeStructureOnDimensionTriggerRaw))
             upgradeStructureOnDimensionTrigger = ResourceKey.create(
-                Registries.DIMENSION, new ResourceLocation(upgradeStructureOnDimensionTriggerRaw.trim()));
+                Registries.DIMENSION, ResourceLocation.parse(upgradeStructureOnDimensionTriggerRaw.trim()));
         if (notBlank(upgradeStructureOnDayCountRaw))
             upgradeStructureOnDayCount = parseLong(upgradeStructureOnDayCountRaw);
         if (notBlank(upgradeStructureOnDayCycleRaw))

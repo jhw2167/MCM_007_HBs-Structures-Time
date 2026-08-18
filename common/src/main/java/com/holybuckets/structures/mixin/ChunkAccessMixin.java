@@ -26,8 +26,10 @@ public abstract class ChunkAccessMixin {
     @Inject(method = "getAllStarts", at = @At("RETURN"), cancellable = true)
     private void onGetAllStarts(CallbackInfoReturnable<Map<Structure, StructureStart>> cir)
     {
-        if( !StructureConceptManager.isManagedChunk(GeneralConfig.OVERWORLD, getPos())) return;
-        StructureConceptManager manager = StructureConceptManager.get(GeneralConfig.OVERWORLD);
+        ChunkAccess me = (ChunkAccess) (Object) this;
+        if(me.getAllReferences().isEmpty()) return;
+        StructureConceptManager manager = StructureConceptManager.getCachedManager(me);
+        if(manager == null) return;
         Map<Structure, StructureStart> starts = cir.getReturnValue();
         ChunkPos chunkPos = getPos();
 
@@ -39,10 +41,11 @@ public abstract class ChunkAccessMixin {
             }
         }
 
-        if (filtered != null) {
-            cir.setReturnValue(Collections.unmodifiableMap(filtered));
+        ((ChunkAccess) (Object) this).setAllStarts(filtered);
+        manager.removeCachedProtochunk(me);
+        cir.setReturnValue(Collections.unmodifiableMap(filtered));
+
         }
-    }
 
 
     /*

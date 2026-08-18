@@ -1,0 +1,40 @@
+plugins {
+    // see https://fabricmc.net/develop/ for new versions
+    id 'fabric-loom' version '1.8-SNAPSHOT' apply(false)
+    // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
+    id 'net.neoforged.moddev' version '2.0.49-beta' apply(false)
+}
+
+version=mod_version
+
+allprojects {
+    apply plugin: "idea"
+
+    tasks.withType(Javadoc).configureEach {
+        options.addStringOption('Xdoclint:none', '-quiet')
+        options.encoding = 'UTF-8'
+    }
+}
+
+subprojects {
+    repositories {
+        maven {
+            url "https://maven.twelveiterations.com/repository/maven-public/"
+            content {
+                includeGroup "net.blay09.mods"
+            }
+        }
+    }
+
+    plugins.withType(JavaPlugin) {
+        dependencies {
+            implementation "com.google.code.gson:gson:${gson_version}"
+            implementation "org.antlr:antlr4-runtime:${antlr_version}"
+            implementation "org.xerial:sqlite-jdbc:${sqlite_version}"
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        it.options.encoding = 'UTF-8'
+    }
+}

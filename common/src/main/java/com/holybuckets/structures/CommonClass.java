@@ -6,6 +6,7 @@ import com.holybuckets.structures.block.be.ModBlockEntities;
 import com.holybuckets.structures.config.StructuresTimeConfig;
 import com.holybuckets.structures.item.ModItems;
 import com.holybuckets.structures.menu.ModMenus;
+import com.holybuckets.structures.networking.ModNetworking;
 import com.holybuckets.structures.platform.Services;
 import net.blay09.mods.balm.api.Balm;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -30,6 +31,7 @@ public class CommonClass {
         ModBlockEntities.initialize(Balm.getBlockEntities());
         ModItems.initialize(Balm.getItems());
         ModMenus.initialize(Balm.getMenus());
+        ModNetworking.init(Balm.getNetworking());
         
         isInitialized = true;
     }
