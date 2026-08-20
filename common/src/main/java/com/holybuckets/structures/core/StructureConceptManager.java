@@ -40,6 +40,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
@@ -106,6 +107,10 @@ public class StructureConceptManager {
 
     public Map<ChunkPos, ManagedStructureConceptChunk> getManagedChunks() {
         return Collections.unmodifiableMap(managedChunks);
+    }
+
+    public boolean isManagedChunk(ChunkPos cp) {
+        return managedChunks.containsKey(cp);
     }
 
     public ManagedStructureConceptChunk getManagedChunk(ChunkPos chunkId) {
@@ -682,6 +687,10 @@ public class StructureConceptManager {
      */
     public Map<? extends Structure, StructureStart> getInitialStarts(ChunkPos chunkPos) {
         if(!managedChunks.containsKey(chunkPos)) return Collections.emptyMap();
+        var starts = managedChunks.get(chunkPos).getCurrentStarts();
+        if(starts.containsKey(ModConfig.getStructure("minecraft:swamp_hut"))) {
+            int i = 0;
+        }
         return managedChunks.get(chunkPos).getCurrentStarts();
     }
 
@@ -691,6 +700,8 @@ public class StructureConceptManager {
      */
     public static StructureConceptManager getCachedManager(ChunkAccess me) {
         //loop over all managers check against protoChunkCache set
+        if(me instanceof LevelChunk) return null;
+
         for(StructureConceptManager manager : MANAGERS.values()) {
             if(manager.protochunkCache.contains(me)) return manager;
         }
@@ -704,6 +715,8 @@ public class StructureConceptManager {
     public void removeCachedProtochunk(ChunkAccess me) {
         protochunkCache.remove(me);
     }
+
+
 
     //** INNER CLASSSES **/
 

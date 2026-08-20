@@ -155,6 +155,12 @@ public class ModConfig {
         return (s != null) ? loc : null;
     }
 
+    @Nullable
+    public static Structure getStructure(String resourceLocationStr) {
+        ResourceLocation loc = ResourceLocation.parse(resourceLocationStr);
+        return ModConfig.getInstance().registry.get(loc);
+    }
+
     public static final ResourceLocation EMPTY_STRUCTURE_LOC = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "empty");
     public static final ResourceLocation SKIP_STRUCTURE_LOC = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "skip");
 

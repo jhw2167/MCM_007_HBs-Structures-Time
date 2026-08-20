@@ -45,9 +45,8 @@ import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.holybuckets.structures.core.StructureConceptManager.StructureSetStartContext;
 
@@ -71,6 +70,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     static final String DEFAULT_ID = "DEFAULT";
     private boolean pendingUpgrade;
     private List<ChunkPos> orderedChunks;
+    private int lastUpgradeErrorInt;
 
     public static void registerManagedChunkData() {
         ManagedChunk.registerManagedChunkData(ManagedStructureConceptChunk.class,
@@ -134,6 +134,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.orderedChunks = new ArrayList<>();
 
         this.upgradeRejectedStatus = -1;
+        this.lastUpgradeErrorInt = -1;
     }
 
     public ManagedStructureConceptChunk(ServerLevel level, ChunkPos cp, StructureSetStartContext ctx, int stage) {
@@ -350,12 +351,11 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private int nextStageQueued = -1;
     public void queueStructureUpgrade(int nextStage)
     {
-        if(nextStage== stage) return;
+        if(nextStage<=stage) return;
         if(upgradeRejectedStatus>-1)
         {
-            if(upgradeRejectedStatus==5 && ManagedChunkUtility.isChunkFullyLoaded(level, id)) {
+            if(upgradeRejectedStatus == 5 && ManagedChunkUtility.isChunkFullyLoaded(level, id))
                 upgradeRejectedStatus=-1; //reset rejection due to chunk unload
-            }
             return;
         }
         if(pendingUpgrade) return;
@@ -466,11 +466,11 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         affectedUpgradeChunks.addAll(oldStructureArea);
         affectedUpgradeChunks.addAll(newStructureArea);
         //pad all affectedUpgradeChunks with radius 5 around each chunk
-        List<ChunkPos> temp = affectedUpgradeChunks.stream().toList();
+        /*List<ChunkPos> temp = affectedUpgradeChunks.stream().toList();
         temp.forEach(cp -> {
             List<ChunkPos> localChunks = HBUtil.ChunkUtil.getLocalChunkPos(cp, 2);
             affectedUpgradeChunks.addAll(localChunks);
-        });
+        });*/
 
         chunksCompletedRefresh.clear();
         chunksCompletedUpgrade.clear();
@@ -483,51 +483,104 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
 
     //here
-    enum UpgradePhase {TERRAIN, DECORATE, COPY, COPY_LOOT, COPY_MOBS, DONE, RESET}
+    enum UpgradePhase {BUFFER_TRY, PENDING, TERRAIN, BUFFER_TERRAIN, STRUCTURE, BUFFER_STRUCTURE,
+        DECORATE, COPY, COPY_LOOT, COPY_MOBS, DONE, RESET}
 
-    private UpgradePhase phase = UpgradePhase.TERRAIN;
+    private UpgradePhase phase = UpgradePhase.PENDING;
     private int chunkIndex = 0;
 
     private static final int CHUNKS_PER_TICK = 4;
+    private static final int LOADED_FAILURE_THRESHOLD = 20;
+
+    private int loadedChunksFailureCount = 0;
+    private List<CompletableFuture<ChunkAccess>> pendingFutures = new ArrayList<>();
 
     private void handleStructureUpgradeOnTick()
     {
         if (!pendingUpgrade) return;
 
+        //applies to every phase: give up once the area has been unloaded for too long
+        ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
+        if (util == null) return;
+        if (!affectedUpgradeChunks.stream().allMatch(util::isLoaded)) {
+            if (++loadedChunksFailureCount >= LOADED_FAILURE_THRESHOLD) {
+                LoggerProject.logWarning(CLASS_ID + "010022",
+                    "Chunks around " + this.getChunkPos() + " stayed unloaded for "
+                    + loadedChunksFailureCount + " ticks, aborting upgrade");
+                phase = UpgradePhase.BUFFER_TRY;
+            }
+        } else {
+            loadedChunksFailureCount = 0;
+        }
 
         switch (phase)
         {
-            case TERRAIN:
-               if( this.regenerateTerrain() ) {
-                   chunkIndex = 0;
-                   phase = UpgradePhase.COPY;
-                   orderedChunks.addAll(affectedUpgradeChunks);
-               } else {
-                    phase = UpgradePhase.RESET;
-                   LoggerProject.logWarning(CLASS_ID + "021",
-                   "Failed to generate all chunks to refresh structure at " + this.getChunkPos() );
-               }
+            case BUFFER_TRY:
+                phase = UpgradePhase.RESET;
                 break;
+
+            case PENDING:
+                phase = UpgradePhase.TERRAIN;
+                break;
+
+            case TERRAIN:
+                orderedChunks.clear();
+                orderedChunks.addAll(affectedUpgradeChunks);
+                ChunkRegenerator.clearCache(affectedUpgradeChunks);
+                pendingFutures = ChunkRegenerator.submitTerrainRegen(level, affectedUpgradeChunks);
+                if (pendingFutures.isEmpty()) {
+                    phase = UpgradePhase.BUFFER_TRY;
+                    break;
+                }
+                phase = UpgradePhase.BUFFER_TERRAIN;
+                break;
+
+            case BUFFER_TERRAIN:
+                ChunkRegenerator.checkTask();
+                if (ChunkRegenerator.anyFailed(pendingFutures)) {
+                    phase = UpgradePhase.BUFFER_TRY;
+                    break;
+                }
+                if (ChunkRegenerator.allComplete(pendingFutures)) phase = UpgradePhase.STRUCTURE;
+                break;
+
+            case STRUCTURE:
+                ChunkRegenerator.harvest(pendingFutures);
+                pendingFutures = ChunkRegenerator.submitStructureRegen(level, affectedUpgradeChunks);
+                if (pendingFutures.isEmpty()) {
+                    phase = UpgradePhase.BUFFER_TRY;
+                    break;
+                }
+                phase = UpgradePhase.BUFFER_STRUCTURE;
+                break;
+
+            case BUFFER_STRUCTURE:
+                ChunkRegenerator.checkTask();
+                if (ChunkRegenerator.anyFailed(pendingFutures)) {
+                    phase = UpgradePhase.BUFFER_TRY;
+                    break;
+                }
+                if (ChunkRegenerator.allComplete(pendingFutures)) {
+                    ChunkRegenerator.harvest(pendingFutures);
+                    pendingFutures = new ArrayList<>();
+                    chunkIndex = 0;
+                    phase = UpgradePhase.COPY;
+                }
+                break;
+
             case COPY:
                 if (chunkIndex >= orderedChunks.size()) {
                     phase = UpgradePhase.COPY_LOOT;
                     break;
                 }
-                //check all orderedChunks are fully loaded
-                ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
-                if(!orderedChunks.stream().allMatch(util::isChunkFullyLoaded)) {
-                    phase = UpgradePhase.RESET;
-                    break;
-                }
-                //ChunkPos copyPos = orderedChunks.get(chunkIndex);
-                for(ChunkPos copyPos : orderedChunks) {
-
+                int copied = 0;
+                while (copied < CHUNKS_PER_TICK && chunkIndex < orderedChunks.size()) {
+                    ChunkPos copyPos = orderedChunks.get(chunkIndex);
                     BoundingBox area = getAreaForChunk(copyPos); // full chunk or structure box
                     ChunkRegenerator.copyChunk(level, copyPos, area, lootPositions);
+                    chunkIndex++;
+                    copied++;
                 }
-                //chunkIndex++;
-                chunkIndex=0;
-                phase = UpgradePhase.COPY_LOOT;
                 break;
 
             case COPY_LOOT:
@@ -594,7 +647,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 break;
 
             case DONE:
+                pendingFutures = new ArrayList<>();
+                loadedChunksFailureCount = 0;
                 pendingUpgrade = false;
+                lastUpgradeErrorInt = -1;
                 this.stage = pendingStage;
                 this.localEntityKillCount = 0; //reset kill tally for the new stage's trigger
                 currentStructureStart = structureStarts.get(currentStructure);
@@ -606,12 +662,23 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                     if(structureManager != null)
                         structureManager.processStructureLoad(currentStructure, currentStructureStart);
                 }
+
+                ChunkRegenerator.finish();
+                lootPositions.clear();
+                orderedChunks.clear();
+                entities.clear();
+                upgradeRejectedStatus = -1;
+                phase = UpgradePhase.PENDING;
+                chunkIndex = 0;
+                break;
                 //and process reset clears as well
 
             case RESET:
                 ChunkRegenerator.finish();
                 lootPositions.clear();
                 orderedChunks.clear();
+                pendingFutures = new ArrayList<>();
+                loadedChunksFailureCount = 0;
                 entities.clear();
                 upgradeRejectedStatus = -1;
                 phase = UpgradePhase.TERRAIN;
@@ -640,20 +707,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     private static final int TERN_RANGE_ADJ_BLOCKS = 16; //expand rang by 16 on each side when apply decoration, to fill in trees and such
 
-    private boolean regenerateTerrain()
-    {
-        ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
-        if (util == null) return false;
-
-        boolean allLoaded = affectedUpgradeChunks.stream().allMatch(util::isChunkFullyLoaded);
-        if (!allLoaded) return false;
-
-        ChunkRegenerator.clearCache(affectedUpgradeChunks);
-        var results = ChunkRegenerator.regenerateArea(level, affectedUpgradeChunks);
-        ChunkRegenerator.fillCache(results);
-        return (results.size() == affectedUpgradeChunks.size() );
-    }
-
     public void pauseUpgrades(boolean pause) {
         if(pause)
             this.upgradeRejectedStatus = 4;
@@ -664,13 +717,17 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public boolean testRejectStructureUpgrade()
     {
         try {
-            testStructureForRejection();
+            testRejectionCriteria();
             return false;
-        } catch (StructureUpgradeRejectionException e) {
+        }
+        catch (StructureUpgradeRejectionException e) {
             if(getChunk()==null) return true;
-
-            List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(getChunk(), 34);
-            nearbyPlayers.forEach(p -> Messager.getInstance().sendChat(p, e.getMessage()));
+            if(e.getId()!=lastUpgradeErrorInt)
+            {
+                lastUpgradeErrorInt = e.getId();
+                List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(getChunk(), 34);
+                nearbyPlayers.forEach(p -> Messager.getInstance().sendChat(p, e.getMessage()));
+            }
             LoggerProject.logInfo("010003", "Structure upgrade rejected for chunk " + id + ": " + e.getMessage());
             return true;
         }
@@ -682,11 +739,19 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      * structure concept limitations
      * @return
      */
-    private void testStructureForRejection() throws StructureUpgradeRejectionException
+    private void testRejectionCriteria() throws StructureUpgradeRejectionException
     {
         if (structureConcept == null) throwUpgradeRejection(0);
 
-        if( !ManagedChunkUtility.isChunkFullyLoaded(level, id) ) {
+        if( getChunk()==null ) {
+            throwUpgradeRejection(5);
+        } else {
+            chunk = getChunk();
+        }
+
+        var localChunks = HBUtil.ChunkUtil.getLocalChunkPos(chunk.getPos(), 3);
+        ManagedChunkUtility util = ManagedChunkUtility.getInstance(level);
+        if( !localChunks.stream().allMatch(util::isChunkFullyLoaded) ) {
             throwUpgradeRejection(5);
         }
 
@@ -749,35 +814,47 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             case 1:
             upgradeRejectedStatus = 1;
               msg = baseMessage + "an existing player spawn is set in structure.";
-              throw new StructureUpgradeRejectionException(msg);
+              throw new StructureUpgradeRejectionException(msg,1);
             case 2:
                 upgradeRejectedStatus = 2;
               int chestCount = structureConcept.getStopUpgradeOnTotalChestCount();
               msg = baseMessage + " chest count exceeded. There are more than "+ chestCount + " chests so the player may be using it as a base.";
-              throw new StructureUpgradeRejectionException(msg);
+              throw new StructureUpgradeRejectionException(msg,2);
             case 3:
                 upgradeRejectedStatus = 3;
               msg = baseMessage + " player has spent many days in structure. And may be using it as a base.";
-              throw new StructureUpgradeRejectionException(msg);
+              throw new StructureUpgradeRejectionException(msg,3);
 
             case 4:
               upgradeRejectedStatus = 4;
               msg = baseMessage + " command disabled structure upgrade.";
-              throw new StructureUpgradeRejectionException(msg);
+              throw new StructureUpgradeRejectionException(msg,4);
             case 5:
                 upgradeRejectedStatus = 5;
                 msg = baseMessage + " chunk is not fully loaded.";
-                throw new StructureUpgradeRejectionException(msg);
+                throw new StructureUpgradeRejectionException(msg,5);
             default:
                 upgradeRejectedStatus = 0;
                 msg = baseMessage + " no structure data found.";
-                throw new StructureUpgradeRejectionException(msg);
+                throw new StructureUpgradeRejectionException(msg,0);
         }
     }
 
         private class StructureUpgradeRejectionException extends Exception {
+            private int id = -1;
             public StructureUpgradeRejectionException(String message) {
                 super(message);
+            }
+            public StructureUpgradeRejectionException(String message, int id) {
+                this(message);
+                this.id = id;
+            }
+            private void setId(int id) {
+                this.id = id;
+            }
+
+            public int getId() {
+                return id;
             }
         }
 

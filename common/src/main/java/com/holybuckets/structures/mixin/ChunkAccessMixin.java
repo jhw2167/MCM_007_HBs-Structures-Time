@@ -1,6 +1,7 @@
 package com.holybuckets.structures.mixin;
 
 import com.holybuckets.foundation.GeneralConfig;
+import com.holybuckets.structures.CommonClass;
 import com.holybuckets.structures.core.StructureConceptManager;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -27,7 +28,10 @@ public abstract class ChunkAccessMixin {
     private void onGetAllStarts(CallbackInfoReturnable<Map<Structure, StructureStart>> cir)
     {
         ChunkAccess me = (ChunkAccess) (Object) this;
-        if(me.getAllReferences().isEmpty()) return;
+        CommonClass.mixinCatch(0);
+        if(((ChunkAccessAccessor) me).getRealStructureStarts().isEmpty()) {
+            return;
+        }
         StructureConceptManager manager = StructureConceptManager.getCachedManager(me);
         if(manager == null) return;
         Map<Structure, StructureStart> starts = cir.getReturnValue();

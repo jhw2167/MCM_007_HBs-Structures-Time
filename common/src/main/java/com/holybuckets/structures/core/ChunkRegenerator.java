@@ -3,35 +3,21 @@ package com.holybuckets.structures.core;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.structures.LoggerProject;
-import com.holybuckets.structures.mixin.NoiseBasedChunkGeneratorInvoker;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
-import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerChunkCache;
-import net.minecraft.server.level.WorldGenRegion;
-import net.minecraft.util.Mth;
-import net.minecraft.util.StaticCache2D;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.level.chunk.status.ChunkPyramid;
-import net.minecraft.world.level.chunk.status.ChunkStep;
-import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
-import net.minecraft.world.level.levelgen.NoiseSettings;
 import net.minecraft.world.level.levelgen.RandomState;
-import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
@@ -39,7 +25,6 @@ import net.minecraft.world.level.levelgen.structure.StructureStart;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import net.minecraft.Util;
 import net.minecraft.server.MinecraftServer;
@@ -48,6 +33,11 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.PrimaryLevelData;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.world.level.levelgen.structure.StructureCheck;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+import com.holybuckets.structures.mixin.ChunkAccessAccessor;
+import com.holybuckets.structures.mixin.StructureManagerAccessor;
 import net.minecraft.world.RandomSequences;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,14 +49,19 @@ public class ChunkRegenerator {
     private static final String CLASS_ID = "012";
 
 
-    private static Map<ChunkPos, ChunkAccess> CHUNK_CACHE = new HashMap<>();
+    private static Map<ChunkPos, ChunkAccess> CHUNK_CACHE = new ConcurrentHashMap<>();
+
+    //positions claimed by an in-flight regeneration, present before their chunk exists
+    private static final Set<ChunkPos> CACHE_KEYS = ConcurrentHashMap.newKeySet();
 
     public static void clearCache(Set<ChunkPos> toClear) {
         CHUNK_CACHE.keySet().removeAll(toClear);
+        CACHE_KEYS.removeAll(toClear);
     }
 
     public static void fillCache(Map<ChunkPos, ChunkAccess> chunks) {
         CHUNK_CACHE.putAll(chunks);
+        CACHE_KEYS.addAll(chunks.keySet());
     }
 
     public static void copyChunk(ServerLevel level, ChunkPos pos, BoundingBox area,
@@ -77,7 +72,7 @@ public class ChunkRegenerator {
         LevelChunk live = ManagedChunkUtility.getManagedChunk(level, pos).getCachedLevelChunk();
         copySections(proto, live, area);
         live.setUnsaved(true);
-        notifyClients(level, live, area);
+        //notifyClients(level, live, area);
 
         //save all the lootable entities for players to loot
         lootPos.addAll(proto.getBlockEntitiesPos().stream()
@@ -106,7 +101,7 @@ public class ChunkRegenerator {
 
             // Mark affected sections dirty in the light engine so it recomputes
             SectionPos sectionPos = SectionPos.of(target.getPos(), sectionY);
-            level.getLightEngine().updateSectionStatus(sectionPos, false);
+            //level.getLightEngine().updateSectionStatus(sectionPos, false);
 
         }
 
@@ -177,8 +172,6 @@ public class ChunkRegenerator {
      * @param chunk
      * @param region
      */
-
-
     private static void notifyClients(ServerLevel level, LevelChunk chunk, BoundingBox region) {
         level.getChunkSource().getLightEngine().propagateLightSources(chunk.getPos());
 
@@ -199,7 +192,7 @@ public class ChunkRegenerator {
     private static final String DIM_LEVEL_NAME = "HBStructuresTempGen";
     private static final long GEN_TIMEOUT_NANOS = 30L * 1_000_000_000L;
 
-    private static ServerLevel DUMMY_LEVEL = null;
+    private static ServerLevel VIRTUAL_LEVEL = null;
     private static LevelStorageSource.LevelStorageAccess DUMMY_SESSION = null;
     private static Path DUMMY_TEMP_DIR = null;
     private static MinecraftServer DUMMY_SERVER = null;
@@ -211,31 +204,6 @@ public class ChunkRegenerator {
         @Override public void stop() { }
     };
 
-    /**
-     * Simulates terrain gen over the specified area returns a map of chunks
-     */
-    public static Map<ChunkPos, ChunkAccess> regenerateArea(ServerLevel level, Collection<ChunkPos> targets)
-    {
-        if (level == null || targets == null || targets.isEmpty()) return Collections.emptyMap();
-        MinecraftServer server = level.getServer();
-        if (server == null) return Collections.emptyMap();
-
-        ServerLevel dummyLevel = getOrCreateDummyLevel(level, server);
-        if (dummyLevel == null) return Collections.emptyMap();
-
-        try {
-            return regenChunks(level, dummyLevel, targets);
-        }
-        catch (Exception e) {
-            LoggerProject.logError(CLASS_ID + "020",
-                "Scratch level regeneration failed: " + e.getMessage());
-            e.printStackTrace();
-            return Collections.emptyMap();
-        }
-    }
-
-
-
 
     /**
      * Creates virtual server level identical to posted level for virtual terrain regen
@@ -244,8 +212,8 @@ public class ChunkRegenerator {
      */
     private static ServerLevel getOrCreateDummyLevel(ServerLevel level, MinecraftServer server)
     {
-        if (DUMMY_LEVEL != null && DUMMY_SERVER == server) return DUMMY_LEVEL;
-        if (DUMMY_LEVEL != null) shutdownDummyLevel();
+        if (VIRTUAL_LEVEL != null && DUMMY_SERVER == server) return VIRTUAL_LEVEL;
+        if (VIRTUAL_LEVEL != null) shutdownDummyLevel();
 
         try {
             DUMMY_TEMP_DIR = Files.createTempDirectory("HBStructuresWorldGen");
@@ -261,7 +229,7 @@ public class ChunkRegenerator {
                 level.getChunkSource().getGenerator()
             );
 
-            DUMMY_LEVEL = new ServerLevel(
+            VIRTUAL_LEVEL = new ServerLevel(
                 server,
                 Util.backgroundExecutor(),
                 DUMMY_SESSION,
@@ -278,7 +246,7 @@ public class ChunkRegenerator {
             DUMMY_SERVER = server;
 
             LoggerProject.logInfo(CLASS_ID + "024", "Created scratch generation level at " + DUMMY_TEMP_DIR);
-            return DUMMY_LEVEL;
+            return VIRTUAL_LEVEL;
         }
         catch (Exception e) {
             LoggerProject.logError(CLASS_ID + "025",
@@ -292,11 +260,11 @@ public class ChunkRegenerator {
 
     public static void shutdownDummyLevel()
     {
-        ServerLevel dummy = DUMMY_LEVEL;
+        ServerLevel dummy = VIRTUAL_LEVEL;
         LevelStorageSource.LevelStorageAccess session = DUMMY_SESSION;
         Path dir = DUMMY_TEMP_DIR;
 
-        DUMMY_LEVEL = null;
+        VIRTUAL_LEVEL = null;
         DUMMY_SESSION = null;
         DUMMY_TEMP_DIR = null;
         DUMMY_SERVER = null;
@@ -316,13 +284,138 @@ public class ChunkRegenerator {
 
 
 
-    private static Map<ChunkPos, ChunkAccess> regenChunks(ServerLevel realLevel,
-                                                          ServerLevel dummyLevel, Collection<ChunkPos> targets)
-    {
-        List<CompletableFuture<ChunkAccess>> futures = submitChunkLoadTasks(dummyLevel, targets);
+    private static final int CREATE_REFERENCES_RADIUS = 8;
 
+    //padded set from the most recent submitTerrainRegen, reused by the swap in wave 2
+    private static Set<ChunkPos> PADDED_TARGETS = new LinkedHashSet<>();
+
+
+    /**
+     * Replaces the generated start with the one the managed chunk wants for its stage,
+     * then rewrites the StructureCheck presence cache so downstream reads agree.
+     */
+    private static void swapStructureStarts(ServerLevel realLevel, ServerLevel dummyLevel,
+                                            Collection<ChunkPos> positions)
+    {
+        StructureConceptManager manager = StructureConceptManager.get(realLevel);
+        if (manager == null) return;
+
+        ChunkGenerator generator = dummyLevel.getChunkSource().getGenerator();
+        RandomState randomState = dummyLevel.getChunkSource().randomState();
+        StructureTemplateManager templates = dummyLevel.getServer().getStructureManager();
+        RegistryAccess registryAccess = dummyLevel.registryAccess();
+        StructureCheck check =
+            ((StructureManagerAccessor) dummyLevel.structureManager()).getStructureCheck();
+        long seed = dummyLevel.getSeed();
+
+        for (ChunkPos cp : positions)
+        {
+            if(!manager.isManagedChunk(cp)) continue;
+            ChunkAccess chunk = CHUNK_CACHE.get(cp);
+            if (chunk == null) continue;
+
+            Map<Structure, StructureStart> starts =
+                ((ChunkAccessAccessor) chunk).getRealStructureStarts();
+
+            starts.keySet().removeIf(s -> !manager.isStructureValidForStage(cp, s));
+
+            for (Map.Entry<? extends Structure, StructureStart> e : manager.getInitialStarts(cp).entrySet())
+            {
+                Structure wanted = e.getKey();
+                StructureStart generated = wanted.generate(
+                    registryAccess, generator, generator.getBiomeSource(), randomState,
+                    templates, seed, cp, 0, dummyLevel, biome -> true);
+                if (!generated.isValid()) generated = e.getValue();
+                chunk.setStartForStructure(wanted, generated);
+            }
+
+            check.onStructureLoad(cp, chunk.getAllStarts());
+        }
+    }
+
+    /** ASYNC BATCH API - caller owns the future list and drives it each tick **/
+
+    private static final long REGEN_CHUNKS_TIMEOUT = 3_000_000L;
+
+    /**
+     * Submits regen futures to regenerates Terrain up to STRUCTURE_STARTS step
+     * call onCheckTask() to flush server chunk cache util each is finish.
+     */
+    public static List<CompletableFuture<ChunkAccess>> submitTerrainRegen(ServerLevel level, Collection<ChunkPos> targets)
+    {
+        if (level == null || targets == null || targets.isEmpty()) return List.of();
+        MinecraftServer server = level.getServer();
+        if (server == null) return List.of();
+
+        ServerLevel dummyLevel = getOrCreateDummyLevel(level, server);
+        if (dummyLevel == null) return List.of();
+
+        PADDED_TARGETS = padded(targets, CREATE_REFERENCES_RADIUS);
+        //keys must be claimed before any future is submitted so getCachedManager resolves during generation
+        CACHE_KEYS.addAll(PADDED_TARGETS);
+        return submitChunkLoadTasks(dummyLevel, PADDED_TARGETS, ChunkStatus.STRUCTURE_STARTS);
+    }
+
+    /**
+     * Regens chunks to FEATURES step
+     * must call onCheckTask() to flush server chunk cache util each chunk is finished
+     */
+    public static List<CompletableFuture<ChunkAccess>> submitStructureRegen(ServerLevel realLevel,
+                                                                            Collection<ChunkPos> targets)
+    {
+        if (VIRTUAL_LEVEL == null || targets == null || targets.isEmpty()) return List.of();
+        Set<ChunkPos> padded = PADDED_TARGETS.isEmpty()
+            ? padded(targets, CREATE_REFERENCES_RADIUS) : PADDED_TARGETS;
+        swapStructureStarts(realLevel, VIRTUAL_LEVEL, padded);
+        return submitChunkLoadTasks(VIRTUAL_LEVEL, targets, ChunkStatus.FEATURES);
+    }
+
+
+    public static void checkTask()
+    {
+        if (VIRTUAL_LEVEL == null) return;
+        ServerChunkCache source = VIRTUAL_LEVEL.getChunkSource();
+        long deadline = System.nanoTime() + REGEN_CHUNKS_TIMEOUT;
+        while (System.nanoTime() < deadline) {
+            if (!source.pollTask()) return;
+        }
+    }
+
+    public static boolean allComplete(List<CompletableFuture<ChunkAccess>> futures) {
+        return futures != null && !futures.isEmpty() && futures.stream().allMatch(CompletableFuture::isDone);
+    }
+
+    public static boolean anyFailed(List<CompletableFuture<ChunkAccess>> futures) {
+        return futures != null && futures.stream().anyMatch(f -> f.isDone() && f.getNow(null) == null);
+    }
+
+    public static int completedCount(List<CompletableFuture<ChunkAccess>> futures) {
+        if (futures == null) return 0;
+        return (int) futures.stream().filter(CompletableFuture::isDone).count();
+    }
+
+    //bounding rect expanded by radius; identical to per-target dilation for a contiguous area
+    private static Set<ChunkPos> padded(Collection<ChunkPos> targets, int radius) {
+        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
+        int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+        for (ChunkPos cp : targets) {
+            minX = Math.min(minX, cp.x); maxX = Math.max(maxX, cp.x);
+            minZ = Math.min(minZ, cp.z); maxZ = Math.max(maxZ, cp.z);
+        }
+        if (minX > maxX) return new LinkedHashSet<>();
+
+        Set<ChunkPos> out = new LinkedHashSet<>(targets);
+        for (int x = minX - radius; x <= maxX + radius; x++) {
+            for (int z = minZ - radius; z <= maxZ + radius; z++) {
+                out.add(new ChunkPos(x, z));
+            }
+        }
+        return out;
+    }
+
+    private static void awaitChunks(ServerChunkCache source, List<CompletableFuture<ChunkAccess>> futures)
+    {
         //ServerChunkCache.pollTask() is public and delegates into the private mainThreadProcessor
-        ServerChunkCache source = dummyLevel.getChunkSource();
         long deadline = System.nanoTime() + GEN_TIMEOUT_NANOS;
         while (!futures.stream().allMatch(CompletableFuture::isDone))
         {
@@ -333,32 +426,32 @@ public class ChunkRegenerator {
             }
             if (!source.pollTask()) Thread.yield();
         }
+    }
 
-        CHUNK_CACHE.clear();
+    public static void harvest(List<CompletableFuture<ChunkAccess>> futures) {
         for (CompletableFuture<ChunkAccess> future : futures) {
             ChunkAccess chunk = future.getNow(null);
             if (chunk == null) continue;
             CHUNK_CACHE.put(chunk.getPos(), chunk);
+            CACHE_KEYS.add(chunk.getPos());
         }
-
-        return CHUNK_CACHE;
     }
 
     private static List<CompletableFuture<ChunkAccess>> submitChunkLoadTasks(ServerLevel scratch,
-        Collection<ChunkPos> targets)
+        Collection<ChunkPos> targets, ChunkStatus status)
     {
         List<CompletableFuture<ChunkAccess>> futures = new ArrayList<>(targets.size());
         for (ChunkPos cp : targets) {
-            CHUNK_CACHE.put(cp, null);
             futures.add(scratch.getChunkSource()
-                .getChunkFuture(cp.x, cp.z, ChunkStatus.FEATURES, true)
+                .getChunkFuture(cp.x, cp.z, status, true)
                 .thenApply(result -> result.orElse(null)));
         }
         return futures;
     }
 
+
     public static boolean cacheContains(ChunkAccess me) {
-        return CHUNK_CACHE.containsKey(me.getPos());
+        return CACHE_KEYS.contains(me.getPos());
     }
 
 
@@ -385,12 +478,13 @@ public class ChunkRegenerator {
 
 
     public static void finish() {
+        PADDED_TARGETS = new LinkedHashSet<>();
         shutdownDummyLevel();
-        clearCache(CHUNK_CACHE.keySet());
+        clearCache(new HashSet<>(CACHE_KEYS));
     }
 
 
     public static Level getVirtualLevel() {
-        return DUMMY_LEVEL;
+        return VIRTUAL_LEVEL;
     }
 }

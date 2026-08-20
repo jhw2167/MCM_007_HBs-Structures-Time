@@ -43,4 +43,17 @@ public class CommonClass {
     {
 
     }
+
+    public static void mixinCatch(int i)
+    {
+    switch (i)
+    {
+        case 0:
+            int j =0;
+            break;
+        case 1:
+            int k =0;
+            break;
+    }
+    }
 }
