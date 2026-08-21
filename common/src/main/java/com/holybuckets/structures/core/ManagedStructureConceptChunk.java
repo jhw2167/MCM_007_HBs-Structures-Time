@@ -256,6 +256,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     public boolean isStructureValidForStage(Structure s) {
         if (structureConcept == null) return false;
+        if(this.pendingUpgrade)
+            return structureConcept.getStage(pendingStage).is(MOD_CONFIG.loc(s));
         return structureConcept.getStage(stage).is(MOD_CONFIG.loc(s));
     }
 
@@ -725,7 +727,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             if(e.getId()!=lastUpgradeErrorInt)
             {
                 lastUpgradeErrorInt = e.getId();
-                List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(getChunk(), 34);
+                List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(pos, 34);
                 nearbyPlayers.forEach(p -> Messager.getInstance().sendChat(p, e.getMessage()));
             }
             LoggerProject.logInfo("010003", "Structure upgrade rejected for chunk " + id + ": " + e.getMessage());
@@ -862,7 +864,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if (structureConcept == null || getChunk()==null) return;
         if(StructuresOverTimeMain.CONFIG.enableStructureUpgradeWarning)
         {
-            List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(getChunk(), 34);
+            List<ServerPlayer> nearbyPlayers = HBUtil.PlayerUtil.getAllPlayersInChunkRange(pos, 34);
             String strDetails = getStructureDetails();
             nearbyPlayers.forEach(p -> Messager.getInstance().sendChat(p,
                 "Nearby structure will be upgraded soon, use commands to stop upgrade:\n"
@@ -947,7 +949,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      * Keep track of the number of times a player was woken up in bounds of this structure
      */
     public void onPlayersWakeUpEvent() {
-        var list = HBUtil.PlayerUtil.getAllPlayersInChunkRange(getChunk(), 3);
+        var list = HBUtil.PlayerUtil.getAllPlayersInChunkRange(pos, 3);
         if(!list.isEmpty()) countTotalWakeups++;
     }
 
