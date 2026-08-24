@@ -161,44 +161,51 @@ public class StructureConcept {
     private static final String INVALID_TRIGGER = "Trigger '%s' is neither an integer (days), an item, or a dimension name. Reverting to default structure upgrade trigger.";
     private static final String CRASHOUT = "The default structure upgrade trigger is not a valid integer, item or dimension. Please edit hbs_structures-common to set a valid default trigger.";
 
+    //past the last stage the upgrade conditions come from the cycle stage, if one is configured
+    @Nullable
+    private StructureConceptStage triggerStage(int s) {
+        if (s > getMaxStage() && cycleStage != -1) return getStage(cycleStage);
+        return getStage(s);
+    }
+
     @Nullable
     public Item getStructureUpgradeItem(int s) {
-        StructureConceptStage stage = getStage(s);
+        StructureConceptStage stage = triggerStage(s);
         if (stage == null) return null;
         return stage.getUpgradeStructureOnItemTrigger();
     }
 
     @Nullable
     public ResourceKey<Level> getStructureUpgradeDimension(int s) {
-        StructureConceptStage stage = getStage(s);
+        StructureConceptStage stage = triggerStage(s);
         if (stage == null) return null;
         return stage.getUpgradeStructureOnDimensionTrigger();
     }
 
     @Nullable
     public Long getStructureUpgradeDays(int s) {
-        StructureConceptStage stage = getStage(s);
+        StructureConceptStage stage = triggerStage(s);
         if (stage == null) return null;
         return stage.getUpgradeStructureOnDayCount();
     }
 
     @Nullable
     public Long getStructureUpgradeDayCycle(int s) {
-        StructureConceptStage stage = getStage(s);
+        StructureConceptStage stage = triggerStage(s);
         if (stage == null) return null;
         return stage.getUpgradeStructureOnDayCycle();
     }
 
     @Nullable
     public Map<EntityType<?>, Integer> getStructureUpgradeMobsKilled(int s) {
-        StructureConceptStage stage = getStage(s);
+        StructureConceptStage stage = triggerStage(s);
         if (stage == null) return null;
         return stage.getUpgradeStructureOnMobsKilled();
     }
 
     @Nullable
     public Map<EntityType<?>, Integer> getStructureUpgradeTotalEntities(int s) {
-        StructureConceptStage stage = getStage(s);
+        StructureConceptStage stage = triggerStage(s);
         if (stage == null) return null;
         return stage.getUpgradeStructureOnTotalEntities();
     }
@@ -245,7 +252,7 @@ public class StructureConcept {
     public StructureConceptStage getStage(int stageNumber) {
         if( stageNumber < 0 ) return  new StructureConceptStage(-1, ModConfig.EMPTY_STRUCTURE_LOC.toString());
         StructureConceptStage result = new StructureConceptStage(stageNumber, ModConfig.SKIP_STRUCTURE_LOC.toString());
-        if(cycleStage!=-1 && stageNumber>getMaxStage()+1) stageNumber=cycleStage;
+        if(cycleStage!=-1 && stageNumber>getMaxStage()) stageNumber=cycleStage;
         for (StructureConceptStage s : stages) {
             if (s.getStage() == stageNumber) result = s;
         }

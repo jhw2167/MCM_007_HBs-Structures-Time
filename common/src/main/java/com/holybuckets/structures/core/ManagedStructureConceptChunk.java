@@ -1,5 +1,8 @@
 package com.holybuckets.structures.core;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.holybuckets.foundation.GeneralConfig;
 import com.holybuckets.foundation.HBUtil;
 import com.holybuckets.foundation.HBUtil.ChunkUtil;
@@ -47,6 +50,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.holybuckets.structures.core.StructureConceptManager.StructureSetStartContext;
 
@@ -291,11 +295,18 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
      */
     public void generateStructureStarts(StructureStart sStart) {
         if (level == null || structureConcept == null) return;
-        if (sStart == null) {
-            Structure originalChunkStruct = MOD_CONFIG.structure(structureConcept.getSourceStructure());
-            sStart = chunk.getAllStarts().get(originalChunkStruct);
+        if (chunk == null) chunk = getChunk();
+        if (chunk == null) return;
+
+        Structure sourceStruct = MOD_CONFIG.structure(structureConcept.getSourceStructure());
+        if (sStart == null && sourceStruct != null) {
+            sStart = chunk.getAllStarts().get(sourceStruct);
         }
-        structureStarts.put(MOD_CONFIG.structure(structureConcept.getSourceStructure()), sStart);
+        //vanilla createReferences iterates getAllStarts().values() and calls isValid(),
+        //so a null start stored here becomes an NPE inside worldgen on a neighbouring chunk
+        if (sourceStruct != null && sStart != null) {
+            structureStarts.put(sourceStruct, sStart);
+        }
 
         ChunkGenerator generator = level.getChunkSource().getGenerator();
         RandomState randomState = level.getChunkSource().randomState();
@@ -334,9 +345,11 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if (structureStarts.isEmpty()) return;
         for (StructureConceptStage stage : structureConcept.getStages()) {
             Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
-            StructureStart start = structureStarts.getOrDefault(s, sStart);
-            BoundingBox bb = start.getBoundingBox();
-            structureBoxes.put(stage.getStructureLoc(), bb);
+            //getOrDefault returns a stored null, it does not fall through to the default
+            StructureStart start = (s == null) ? null : structureStarts.get(s);
+            if (start == null) start = sStart;
+            if (start == null) continue;
+            structureBoxes.put(stage.getStructureLoc(), start.getBoundingBox());
         }
 
     }
@@ -353,7 +366,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     private int nextStageQueued = -1;
     public void queueStructureUpgrade(int nextStage)
     {
-        if(nextStage<=stage) return;
+        if(nextStage==stage) return;
+        int maxStage = structureConcept.getMaxStage();
+        if(stage>maxStage) return;
+
         if(upgradeRejectedStatus>-1)
         {
             if(upgradeRejectedStatus == 5 && ManagedChunkUtility.isChunkFullyLoaded(level, id))
@@ -365,10 +381,15 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         if(nextStage == nextStageQueued) {
             triggerStructureUpgrade(nextStage, false);
+            return;
         } else {
             warnPlayersOfStructureUpgrade();
         }
         this.nextStageQueued = nextStage;
+    }
+
+    public boolean isPendingUpgrade() {
+        return pendingUpgrade || nextStageQueued>-1;
     }
 
     /**
@@ -384,10 +405,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         }
 
         //1. Check if Chunk is available
-        if (newStage < 1 || newStage == this.stage) {
-            this.stage = newStage;
-            return;
-        }
+        if (newStage == this.stage) return;
+
         if (level == null || structureConcept == null || getParent() == null) return;
         if (chunk == null) chunk = getParent().getCachedLevelChunk();
         if (!(chunk instanceof LevelChunk)) return;
@@ -480,7 +499,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         this.pendingStage = newStage;
         this.pendingUpgrade = true;
         this.upgradeRejectedStatus = -1;
-
+        nextStageQueued = -1;
     }
 
 
@@ -496,7 +515,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
     private int loadedChunksFailureCount = 0;
     private List<CompletableFuture<ChunkAccess>> pendingFutures = new ArrayList<>();
-
+    //handleTick upgradetick, structureTick
     private void handleStructureUpgradeOnTick()
     {
         if (!pendingUpgrade) return;
@@ -579,7 +598,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 while (copied < CHUNKS_PER_TICK && chunkIndex < orderedChunks.size()) {
                     ChunkPos copyPos = orderedChunks.get(chunkIndex);
                     BoundingBox area = getAreaForChunk(copyPos); // full chunk or structure box
-                    ChunkRegenerator.copyChunk(level, copyPos, area, lootPositions);
+                    boolean success = ChunkRegenerator.copyChunk(level, copyPos, area, lootPositions);
+                    if(!success) return;
                     chunkIndex++;
                     copied++;
                 }
@@ -874,6 +894,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
 
     public Map<? extends Structure, StructureStart> getStructureStarts() {
+        structureStarts.values().removeIf(Objects::isNull);
         return structureStarts;
     }
 
@@ -899,6 +920,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     {
         if (structureConcept == null) return "No structure concept in this chunk.";
 
+        StructureConcept concept = this.getStructureConcept();
         String rejectMessage = "";
         if(upgradeRejectedStatus > -1) {
             try {
@@ -909,10 +931,21 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         }
 
         String upgradeTrigger = "N/A";
-        if(stage < this.getStructureConcept().getMaxStage() )
+        if(stage <= concept.getMaxStage() || concept.getCycleStage()>-1 )
         {
-            var nextStage = structureConcept.getStage(this.stage+1);
-            if(nextStage != null) upgradeTrigger = nextStage.getUpgradeStructureTrigger();
+            int nextStage = stage+1;
+            if(stage == concept.getMaxStage())
+                nextStage = concept.getCycleStage();
+
+            StructureConceptAPI api = new StructureConceptAPI(this.level);
+            JsonObject stageConfig = api.getStageConfig(concept.getStructureConceptId(), nextStage);
+             if(stageConfig != null && stageConfig.has("triggers")) {
+                JsonArray triggers = stageConfig.getAsJsonArray("triggers");
+                upgradeTrigger = triggers.asList().stream()
+                    .map(JsonElement::getAsString).collect(Collectors.joining(", "));
+             }
+        } else {
+            upgradeTrigger = "MAX STAGE";
         }
 
         String nextStructureId = "N/A";
@@ -954,6 +987,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     }
 
     private boolean isInEntityArea(BlockPos p) {
+        if(pendingUpgrade || entityBox==null) return false;
         return entityBox.isInside(p);
     }
 
@@ -969,6 +1003,11 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     //counts live entities of the given type in the area in real time
     public boolean testCountLocalEntities(EntityType<?> mob, int count) {
         if (level == null) return false;
+        if(pendingUpgrade) return false;
+        if(entityBox==null ) {
+            entityBox = monitorEntityArea();
+            if(entityBox==null) return false;
+        }
         int found = level.getEntitiesOfClass(Entity.class, AABB.of(entityBox), e -> e.getType() == mob).size();
         return found >= count;
     }
@@ -976,6 +1015,8 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     //16-chunk-radius box around the center chunk used for entity kill/count conditions
     private BoundingBox monitorEntityArea() {
         if (level == null || pos == null) return null;
+        if(pendingUpgrade) return null;
+
         int minX = pos.x - ENTITY_AREA_RANGE;
         int minZ = pos.z - ENTITY_AREA_RANGE;
         int maxX = pos.x + ENTITY_AREA_RANGE;

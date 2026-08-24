@@ -2,6 +2,7 @@ package com.holybuckets.structures.config.model;
 
 import com.google.gson.JsonObject;
 import com.holybuckets.foundation.HBUtil;
+import com.holybuckets.structures.CommonClass;
 import com.holybuckets.structures.StructuresOverTimeMain;
 import com.holybuckets.structures.config.ModConfig;
 import net.minecraft.core.registries.Registries;
@@ -9,6 +10,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
@@ -22,7 +24,7 @@ public class StructureConceptStage {
     private boolean includeEntities;
     private boolean includeLoot;
 
-    private String upgradeStructureTrigger="32"; //can be an item, a dimension, or a number of days
+    private String upgradeStructureTrigger="custom"; //can be an item, a dimension, or a number of days
 
     private static final long DAY_CYCLE_MORNING  = 1000L;  //overworld tick for morning
     private static final long DAY_CYCLE_NOON      = 6000L;  //overworld tick for noon
@@ -58,7 +60,7 @@ public class StructureConceptStage {
         }
         includeEntities = false;
         includeLoot = true;
-        this.upgradeStructureTrigger = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
+        //this.upgradeStructureTrigger = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
         this.removeEntitiesAfterStage = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.removeEntities;
     }
 
@@ -144,6 +146,8 @@ public class StructureConceptStage {
     /** Resolves the raw trigger strings into their typed values; called at beforeServerStarted. */
     public void hydrateTriggers()
     {
+        //Try to convert upgradeStructureTrigger to an itemTrigger, dimension trigger, or day count trigger
+
         if (notBlank(upgradeStructureOnItemTriggerRaw))
             upgradeStructureOnItemTrigger = HBUtil.ItemUtil.itemNameToItem(upgradeStructureOnItemTriggerRaw);
         if (notBlank(upgradeStructureOnDimensionTriggerRaw))
@@ -157,6 +161,25 @@ public class StructureConceptStage {
             upgradeStructureOnMobsKilled = parseEntityCounts(upgradeStructureOnMobsKilledRaw);
         if (notBlank(upgradeStructureOnTotalEntitiesRaw))
             upgradeStructureOnTotalEntities = parseEntityCounts(upgradeStructureOnTotalEntitiesRaw);
+
+        if(upgradeStructureTrigger==null || upgradeStructureTrigger.isEmpty()) {
+            upgradeStructureTrigger = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
+        }
+        else if(notBlank(upgradeStructureTrigger))
+        {
+            String def = StructuresOverTimeMain.CONFIG.defaultConceptConfigs.upgradeStructureTrigger;
+            if(upgradeStructureTrigger.toLowerCase().equals(def)) return;
+
+            if(upgradeStructureOnItemTrigger == null) {
+                var trig = HBUtil.ItemUtil.itemNameToItem(upgradeStructureTrigger);
+                if(trig != null && !trig.equals(Items.AIR)) {
+                    upgradeStructureOnItemTrigger = trig;
+                }
+            }
+            if(upgradeStructureOnDayCount==null && upgradeStructureOnItemTrigger==null) {
+                upgradeStructureOnDayCount = parseLong(upgradeStructureTrigger);
+            }
+        }
     }
 
     private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
@@ -170,8 +193,10 @@ public class StructureConceptStage {
     private static Long dayCycleToTicks(String cycle) {
         switch (cycle.trim().toLowerCase()) {
             case "noon":     return DAY_CYCLE_NOON;
+            case "night":
             case "evening":  return DAY_CYCLE_EVENING;
             case "midnight": return DAY_CYCLE_MIDNIGHT;
+            case "morning":
             default:         return DAY_CYCLE_MORNING;
         }
     }

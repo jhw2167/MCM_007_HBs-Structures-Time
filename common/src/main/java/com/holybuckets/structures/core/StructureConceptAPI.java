@@ -1,5 +1,6 @@
 package com.holybuckets.structures.core;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.holybuckets.structures.config.model.StructureConcept;
 import com.holybuckets.structures.config.model.StructureConceptStage;
@@ -22,10 +23,16 @@ public class StructureConceptAPI {
 
     private Level level;
     StructureConceptManager manager;
-    public StructureConceptAPI (Level level) {
+
+    public StructureConceptAPI(Level level) {
         this.level = level;
-        manager =StructureConceptManager.get(level);
+        manager = StructureConceptManager.get(level);
     }
+
+    public int triggerConceptUpgrade(StructureConcept concept) {
+        return manager.triggerConceptUpgrade(concept);
+    }
+
 
     @Nullable
     public ManagedStructureConceptChunk getNearestStructureChunk(BlockPos blockPos){
@@ -109,6 +116,54 @@ public class StructureConceptAPI {
                 json.addProperty(""+stage.getStage(), "Structure: " +stage.getStructureId());
             }
         }
+
+        return json;
+    }
+
+    public JsonObject getStageConfig(String conceptId, int stageNo) {
+        StructureConcept concept = StructureConceptManager.MOD_CONFIG.getStructureConcept(conceptId);
+        if(concept == null) return null;
+
+        StructureConceptStage stage = concept.getStage(stageNo);
+        if(stage == null) return null;
+
+        JsonObject json = new JsonObject();
+        json.addProperty("conceptId", conceptId);
+        json.addProperty("stage", stageNo);
+        json.addProperty("structureId", stage.getStructureId());
+        json.addProperty("structureName", stage.getStructureLoc().toString());
+        //list out all the triggers that are not null
+        JsonArray triggers = new JsonArray();
+        if(stage.getUpgradeStructureOnDayCount() != null)
+            triggers.add("Days Passed: " + stage.getUpgradeStructureOnDayCount());
+        if(stage.getUpgradeStructureOnDayCycle() != null)
+            triggers.add("Day Time: " + stage.getUpgradeStructureOnDayCycle());
+        if(stage.getUpgradeStructureOnDimensionTrigger()  != null)
+            triggers.add("Dimension: " + stage.getUpgradeStructureOnDimensionTrigger());
+        if(stage.getUpgradeStructureOnItemTrigger() != null)
+            triggers.add("Item: " + stage.getUpgradeStructureOnItemTrigger());
+        if(stage.getUpgradeStructureOnMobsKilled() != null) {
+            var map = stage.getUpgradeStructureOnMobsKilled();
+            String msg = "Mobs Killed: ";
+            for(var entry : map.entrySet()) {
+                msg += entry.getKey() + "=" + entry.getValue() + ", ";
+            }
+            msg = msg.substring(0, msg.length() - 2); // remove last comma and space
+            triggers.add(msg);
+        }
+        if(stage.getUpgradeStructureOnTotalEntities()  != null) {
+            var map = stage.getUpgradeStructureOnTotalEntities();
+            String msg = "Total Entities: ";
+            for(var entry : map.entrySet()) {
+                msg += entry.getKey() + "=" + entry.getValue() + ", ";
+            }
+            msg = msg.substring(0, msg.length() - 2); // remove last comma and space
+            triggers.add(msg);
+        }
+        if(stage.getUpgradeStructureTrigger() != null)
+            triggers.add("Custom Trigger: " + stage.getUpgradeStructureTrigger());
+
+        json.add("triggers", triggers);
 
         return json;
     }

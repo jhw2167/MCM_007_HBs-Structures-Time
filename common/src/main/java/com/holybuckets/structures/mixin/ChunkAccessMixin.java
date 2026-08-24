@@ -37,11 +37,18 @@ public abstract class ChunkAccessMixin {
         Map<Structure, StructureStart> starts = cir.getReturnValue();
         ChunkPos chunkPos = getPos();
 
+        //vanilla createReferences iterates getAllStarts().values() calling isValid(),
+        //so a null key or value published here becomes an NPE inside worldgen
         Map<Structure, StructureStart> filtered = new HashMap<>();
-        filtered.putAll(manager.getInitialStarts(chunkPos));
+        manager.getInitialStarts(chunkPos).forEach((k, v) -> {
+            if (k != null && v != null) filtered.put(k, v);
+        });
         for (Structure structure : starts.keySet()) {
+            if (structure == null) continue;
+            StructureStart start = starts.get(structure);
+            if (start == null) continue;
             if (manager.isStructureValidForStage(chunkPos, structure)) {
-                filtered.put(structure, starts.get(structure));
+                filtered.put(structure, start);
             }
         }
 

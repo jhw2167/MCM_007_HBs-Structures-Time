@@ -8,7 +8,6 @@ import com.holybuckets.structures.config.model.StructureConceptStage;
 import javax.annotation.Nullable;
 import java.util.*;
 
-import static com.holybuckets.structures.config.ModConfig.EMPTY_STRUCTURE_LOC;
 
 /**
  * Class: StructureConceptJsonConfig
@@ -109,38 +108,66 @@ public class StructureConceptJsonConfig implements IStringSerializable {
 
 
     //** DEFAULTS **//
+
+    //triggers are stored on the stage they advance INTO, and must be set through the
+    //typed raw setters - upgradeStructureTrigger alone is never hydrated
+    private static StructureConceptStage stage(int stage, String structureId, boolean addMobs, boolean addLoot) {
+        return new StructureConceptStage(stage, structureId, null, addMobs, addLoot);
+    }
+
     public static StructureConceptJsonConfig buildDefaultConfig() {
         List<StructureConcept> concepts = new ArrayList<>();
 
-        // village: witch hut → village → (empty) → pillager outpost
-        List<StructureConceptStage> villageStages = List.of(
-            new StructureConceptStage(0, "minecraft:swamp_hut", "32", false, true),
-            new StructureConceptStage(1, "minecraft:village_plains", "the_nether", true, true),
-            new StructureConceptStage(2, EMPTY_STRUCTURE_LOC.toString() , "the_end", false, true),
-            new StructureConceptStage(3, "minecraft:pillager_outpost", "32", true, true)
-        );
+        // village: swamp hut -> village -> pillager outpost
+        StructureConceptStage villageS0 = stage(0, "minecraft:swamp_hut", false, true);
+        villageS0.setUpgradeStructureOnTotalEntitiesRaw("minecraft:villager,5");
+
+        StructureConceptStage villageS1 = stage(1, "minecraft:village_plains", true, true);
+        villageS1.setUpgradeStructureOnItemTriggerRaw("minecraft:diamond_sword");
+
+        StructureConceptStage villageS2 = stage(2, "minecraft:pillager_outpost", true, true);
+        villageS2.setUpgradeStructureOnDimensionTriggerRaw("minecraft:the_nether");
+
+        StructureConceptStage villageS3 = stage(3, "empty", true, true);
+        villageS3.setUpgradeStructureOnDayCycleRaw("night");
+
+
+
         concepts.add(new StructureConcept(
             "village",
-            "minecraft:swamp_hut",
-            "A village that starts as a witch hut, evolves into a village, skips stage 3, and then becomes a pillager outpost",
-            villageStages,
+            "minecraft:village_plains",
+            "A swamp hut that becomes a plains village when a player holds a diamond sword, "
+                + "then a pillager outpost once a player travels to the nether",
+            List.of(villageS0, villageS1, villageS2, villageS3),
             true,
             -1,
             8
         ));
+        concepts.get(0).setCycleStage(0);
 
-        // vanishingShip: shipwreck → empty
-        List<StructureConceptStage> shipStages = List.of(
-            new StructureConceptStage(0, "minecraft:shipwreck", "32", false, true),
-            new StructureConceptStage(1, "", "32", false, true)
+        // test: ruined portal -> pillager outpost -> trial chambers (unique)
+        StructureConceptStage testS0 = stage(0, "minecraft:ruined_portal", false, true);
+
+        StructureConceptStage testS1 = stage(1, "minecraft:pillager_outpost", true, true);
+        testS1.setUpgradeStructureOnMobsKilledRaw("minecraft:zombie,3");
+        //set it to upgrade with wooden sword item
+        testS1.setUpgradeStructureOnItemTriggerRaw("minecraft:wooden_sword");
+
+        StructureConceptStage testS2 = stage(2, "minecraft:trial_chambers", true, true);
+        testS2.setUpgradeStructureOnDayCountRaw("1");
+
+        StructureConcept test = new StructureConcept(
+            "test",
+            "minecraft:ruined_portal",
+            "A ruined portal that becomes a pillager outpost after three zombie kills, "
+                + "then a single world-unique trial chambers",
+            List.of(testS0, testS1, testS2),
+            false,
+            -1,
+            -1
         );
-        concepts.add(new StructureConcept(
-            "vanishingShip",
-            "minecraft:shipwreck",
-            "A Shipwreck which disappears after the early game",
-            shipStages,
-            false, 0, 8
-        ));
+        test.setUniqueStage(2);
+        concepts.add(test);
 
         return new StructureConceptJsonConfig(concepts);
     }

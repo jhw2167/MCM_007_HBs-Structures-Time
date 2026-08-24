@@ -15,45 +15,19 @@ Keep Notes:
 
 Structures over Time
 
-- make a copy of the over world "canvas"
-- track each structure that spawns in the over world, ad them to manager ::managed chunk extension
-- save start and end server tick
-
-- hack structure creation method - no structures will spawn in canvas, but we need same biome distribution
-- must be a dynamic copy of the over world, so all modded configurations are transfered
-- structureManager.isApproved()
-- load json config 
-- try to upgrade villages to integrated villages
-- remove all integrated villages
-- spawn normal villages
-- spawn integrated ones on command
-- 
-
-I want to make an exact copy of the Minecraft Overworld, it's structures, terrain patterns and layout. The vanilla_dimension for a given Minecraft seed will have each chunk identical to the corresponding chunk in the over world. For a given chunk, it will be the same biome as the Overworld, make use of the same carvers, and structure setters. It will have the same ore clumps at the save position, the same trees and geodes. This must be copied at runtime, not data gen'd, so all modded additions to the Overworld are considered. Where can I hook into dynamically to get a link to the Overworlds source generators.
-
-- Overworld copy has all structures removed
-- use "do place" structure to place in established location, trigger jigsaws
-- 
-
-
-
-- if player spends significant time in a chunk, the structure is not upgraded - we'll see here, makes sense for a surprise structure to spawn or villagers to build
-- 
-Track Players Near Structures - need to know if player has actually discovered structures, more than structures that were just chunk loaded at some point. For when we start random chunk loading to find structures.
-- need to start saving client data on client side, we can do json in client folder
-
 
 To Do:
 ---
 
-1. Look into secondary structure refusal for large structures like cataclysm
-2. Think of way to remove entities on structure upgrade
-3. Add cyclic structure upgrades
-4. Add time of day triggers
+1. Setting global stage updates structures beyond their max stage
+2. Clean up  seeds and other veggies when things upgrade
+3. Clean up entities on structure upgrade works
+4. Make sure unique property is working
 
-5. better checking of max structure upgrades allowed - duplicate upgrades
-6. Optimal structure placement - not near bodies of water etc.
-7. API support for intentional structure upgrades
+5.
+
+
+
 
 
 //On structureConcept
@@ -63,7 +37,7 @@ To Do:
 upgradeStructureOnItemTrigger: "cataclysm:cursed_eye" //a player holding the item triggers next upgrade in structure
 upgradeStructureOnDimensionTrigger: "minecraft:the_nether" //a player traveling to a new dimension triggers the upgrade
 upgradeStructureOnDayCount: "20" //after the number of days in the world, all structures of this type upgrade
-upgradeStructureOnDayCycle: "morning" //morning, noon, evening, midnight
+upgradeStructureOnDayCycle: "morning" //morning, noon, evening, night, midnight
 upgradeStructureOnMobsKilled: "<entityType>,<kill_count>", //"minecraf:creeper,20", when entities are killed locally
 upgradeStructureOnTotalEntities: "<entityType>,<total_count>", //"minecraf:creeper,20", when entities are in the area
 removeEntitiesAfterStage: true, //we will attempt to remove entities in the area when this structure is ending

@@ -64,12 +64,13 @@ public class ChunkRegenerator {
         CACHE_KEYS.addAll(chunks.keySet());
     }
 
-    public static void copyChunk(ServerLevel level, ChunkPos pos, BoundingBox area,
+    public static boolean copyChunk(ServerLevel level, ChunkPos pos, BoundingBox area,
     List<BlockPos> lootPos) {
         ChunkAccess proto = CHUNK_CACHE.get(pos);
-        if (proto == null) return;
+        if (proto == null) return false;
 
         LevelChunk live = ManagedChunkUtility.getManagedChunk(level, pos).getCachedLevelChunk();
+        if(live==null) return false;
         copySections(proto, live, area);
         live.setUnsaved(true);
         //notifyClients(level, live, area);
@@ -78,6 +79,8 @@ public class ChunkRegenerator {
         lootPos.addAll(proto.getBlockEntitiesPos().stream()
             .filter(area::isInside)
             .toList());
+
+        return true;
     }
 
     // Copies block state data from the scratch ProtoChunk into the live LevelChunk, bounded by region.
@@ -317,19 +320,29 @@ public class ChunkRegenerator {
             Map<Structure, StructureStart> starts =
                 ((ChunkAccessAccessor) chunk).getRealStructureStarts();
 
+            //vanilla createReferences walks values() calling isValid(), a null entry crashes worldgen
+            starts.keySet().removeIf(Objects::isNull);
+            starts.values().removeIf(Objects::isNull);
+
             starts.keySet().removeIf(s -> !manager.isStructureValidForStage(cp, s));
 
             for (Map.Entry<? extends Structure, StructureStart> e : manager.getInitialStarts(cp).entrySet())
             {
                 Structure wanted = e.getKey();
+                if (wanted == null) continue;
+
                 StructureStart generated = wanted.generate(
                     registryAccess, generator, generator.getBiomeSource(), randomState,
                     templates, seed, cp, 0, dummyLevel, biome -> true);
-                if (!generated.isValid()) generated = e.getValue();
+                if (generated == null || !generated.isValid()) generated = e.getValue();
+                if (generated == null || !generated.isValid()) continue;
+
                 chunk.setStartForStructure(wanted, generated);
             }
 
-            check.onStructureLoad(cp, chunk.getAllStarts());
+            Map<Structure, StructureStart> published = new HashMap<>(chunk.getAllStarts());
+            published.values().removeIf(Objects::isNull);
+            check.onStructureLoad(cp, published);
         }
     }
 

@@ -50,6 +50,7 @@ import net.minecraft.world.level.chunk.StructureAccess;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Class: StructureConceptManager
@@ -71,17 +72,17 @@ public class StructureConceptManager {
     private final Registry<Structure> registry;
     private final Set<ChunkAccess> protochunkCache;
     private final Map<ChunkPos, ManagedStructureConceptChunk> managedChunks;
-    private final Map<EntityType<?>, Set<ManagedStructureConceptChunk>> mobTrackingChunks = new HashMap<>();
+    private final Map<EntityType<?>, Set<ManagedStructureConceptChunk>> mobTrackingChunks = new ConcurrentHashMap<>();
     private static int globalStage=0;
 
 
     //** STATICS
-    static Map<ResourceKey<Level>, StructureConceptManager> MANAGERS = new HashMap<>();
+    static Map<ResourceKey<Level>, StructureConceptManager> MANAGERS = new ConcurrentHashMap<>();
     static ModConfig MOD_CONFIG;
     static GeneralConfig GENERAL_CONFIG;
-    static Map<String, BlockPos> playerSpawnPos = new HashMap<>();
-    static Map<StructureConcept, Integer> conceptStages = new HashMap<>();
-    static final Map<StructureConcept, ChunkPos> uniqueStructures = new HashMap<>(); //concept -> the one chunk allowed past uniqueStage
+    static Map<String, BlockPos> playerSpawnPos = new ConcurrentHashMap<>();
+    static Map<StructureConcept, Integer> conceptStages = new ConcurrentHashMap<>();
+    static final Map<StructureConcept, ChunkPos> uniqueStructures = new ConcurrentHashMap<>(); //concept -> the one chunk allowed past uniqueStage
     static boolean pauseUpgrades = false;
 
 
@@ -89,8 +90,9 @@ public class StructureConceptManager {
     private StructureConceptManager(ServerLevel level) {
         this.level = level;
         this.registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        this.managedChunks = new HashMap<>();
-        this.protochunkCache = new HashSet<>();
+        //written from worldgen worker threads, iterated on the server thread
+        this.managedChunks = new ConcurrentHashMap<>();
+        this.protochunkCache = ConcurrentHashMap.newKeySet();
         LoggerProject.logInit("011000", StructureConceptManager.class.getName());
     }
 
@@ -162,6 +164,7 @@ public class StructureConceptManager {
         }
     }
 
+    //dimensionChanged, changeDimension change dimension
     private static void handleDimensionChange(PlayerChangedDimensionEvent event)
     {
         for(StructureConcept concept : MOD_CONFIG.getConcepts()) {
@@ -240,7 +243,7 @@ public class StructureConceptManager {
         ManagedStructureConceptChunk managed = new ManagedStructureConceptChunk(
         level, cp, ctx, globalStage);
         managedChunks.put(cp, managed);
-        protochunkCache.add((ChunkAccess) ctx.structureAccess);
+        if (ctx.structureAccess instanceof ChunkAccess ca) protochunkCache.add(ca);
 
 
         LoggerProject.logDebug("011020", "Registered timed structure chunk: " + cp);
@@ -289,8 +292,10 @@ public class StructureConceptManager {
         Set<StructureConcept> conceptsCopy = new HashSet<>(pendingStageUpgrades.keySet());
         for(StructureConcept concept : conceptsCopy)
         {
-            conceptStages.put(concept, pendingStageUpgrades.get(concept));
-            int nextStage = pendingStageUpgrades.remove(concept) + 1;
+            Integer promoted = pendingStageUpgrades.remove(concept);
+            if (promoted == null) continue;
+            conceptStages.put(concept, promoted);
+            int nextStage = promoted + 1;
             setNextUpgradeTrigger(concept, nextStage);
 
             //check unqiue stage
@@ -340,8 +345,8 @@ public class StructureConceptManager {
 
     //** UPGRADE TRIGGERS
 
-    static final Map<StructureConcept, Integer> daysSinceUpgrade = new HashMap<>();
-    static final Map<StructureConcept, Integer> pendingStageUpgrades = new HashMap<>();
+    static final Map<StructureConcept, Integer> daysSinceUpgrade = new ConcurrentHashMap<>();
+    static final Map<StructureConcept, Integer> pendingStageUpgrades = new ConcurrentHashMap<>();
 
     //rebuilds the kill-tracking index from every managed chunk's next-stage mob criteria
     private void refreshMobTrackingChunks()
@@ -356,7 +361,7 @@ public class StructureConceptManager {
             if(killed == null) continue;
             EntityType<?> mob = null;
             for(EntityType<?> type : killed.keySet()) {
-                mobTrackingChunks.put(type, new HashSet<>());
+                mobTrackingChunks.put(type, ConcurrentHashMap.newKeySet());
                 mob = type;
             }
             applicableConcepts.put(concept, mob);
@@ -413,9 +418,20 @@ public class StructureConceptManager {
     private static void upgradeMe(int effectiveStage, StructureConcept concept) {
         int stageNo = conceptStages.getOrDefault(concept, 0);
         if(stageNo != effectiveStage || pendingStageUpgrades.containsKey(concept)) return;
+        if(concept.getMaxStage()<stageNo+1) {
+            if(concept.getCycleStage()>-1)
+                stageNo = concept.getCycleStage()-1;
+             else return;
+        }
         pendingStageUpgrades.put(concept, stageNo+1);
     }
 
+    public int triggerConceptUpgrade(StructureConcept concept) {
+        if(!conceptStages.containsKey(concept)) return -1;
+        int stage = conceptStages.get(concept);
+        upgradeMe(stage, concept);
+        return stage;
+    }
 
     //** DATA WRITING
 
@@ -431,13 +447,13 @@ public class StructureConceptManager {
             for(Map.Entry<String, JsonElement> entry : spawnPosObj.entrySet()) {
                 String dimAndName = entry.getKey();
                 BlockPos bp = HBUtil.BlockUtil.stringToBlockPos(entry.getValue().getAsString());
-                playerSpawnPos.put(dimAndName, bp);
+                if (bp != null) playerSpawnPos.put(dimAndName, bp);
             }
         }
 
         //load structure concepts and stages out of "conceptStages"
         for(StructureConcept concept : MOD_CONFIG.getConcepts()) {
-            conceptStages.put(concept, 0);
+            if (concept != null) conceptStages.put(concept, 0);
         }
         JsonElement conceptStagesEl = worldData.get("conceptStages");
         if(conceptStagesEl != null && conceptStagesEl.isJsonObject())
@@ -575,9 +591,6 @@ public class StructureConceptManager {
         ManagedStructureConceptChunk.GENERAL_CONFIG = GeneralConfig.getInstance();
         ManagedStructureConceptChunk.MOD_CONFIG = ModConfig.getInstance();
 
-    }
-
-    private static void onServerStopped(ServerStoppedEvent event) {
         for(var manager : MANAGERS.values()) {
             manager.managedChunks.clear();
             manager.mobTrackingChunks.clear();
@@ -588,6 +601,10 @@ public class StructureConceptManager {
         StructureConceptManager.uniqueStructures.clear();
 
         StructureConceptManager.MANAGERS.clear();
+    }
+
+    private static void onServerStopped(ServerStoppedEvent event) {
+
     }
 
 

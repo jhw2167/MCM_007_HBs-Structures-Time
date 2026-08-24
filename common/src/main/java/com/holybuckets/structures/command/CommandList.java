@@ -41,6 +41,7 @@ public class CommandList {
     private static final String PREFIX = "hbStructures";
 
     public static void register() {
+        LoggerProject.logInfo("033000", "Registering CommandList " + PREFIX);
         //CommandRegistry.register(LocateClusters::noArgs);
         //CommandRegistry.register(LocateClusters::limitCount);
         //CommandRegistry.register(LocateClusters::limitCountSpecifyBlockType);
@@ -61,6 +62,8 @@ public class CommandList {
         CommandRegistry.register(ForceUpgrade::withChunkPosAndConfirm);
         CommandRegistry.register(ResumeUpgrades::noArgs);
         CommandRegistry.register(ResumeUpgrades::withChunkPos);
+        LoggerProject.logInfo("033001", "Finished Registering CommandList " + PREFIX);
+
     }
 
     //1. Locate Clusters
@@ -356,7 +359,7 @@ public class CommandList {
             return Commands.literal(PREFIX)
                 .then(Commands.literal("stageConfig")
                     .then(Commands.argument("structureConceptId", StringArgumentType.string())
-                        .then(Commands.argument("stageNo", IntegerArgumentType.integer(1))
+                        .then(Commands.argument("stageNo", IntegerArgumentType.integer(0))
                             .executes(context -> {
                                 String conceptId = StringArgumentType.getString(context, "structureConceptId");
                                 int stageNo = IntegerArgumentType.getInteger(context, "stageNo");
@@ -370,8 +373,8 @@ public class CommandList {
         private static int execute(CommandSourceStack source, String conceptId, int stageNo) {
             // stageNo == -1 => return total stage count
             StructureConceptAPI api = new StructureConceptAPI(source.getLevel());
-            //JsonObject data = api.getStageConfig(conceptId, stageNo);
-
+            JsonObject data = api.getStageConfig(conceptId, stageNo);
+            printJson(source, data);
             return 1;
         }
     }

@@ -83,8 +83,8 @@ public class StructuresTimeConfig {
         public int stopUpgradeOnDaysSpentInStructure = 8;    //stops structure upgrade if player has spent a lot of time in the structure
 
 
-        @Comment("Default upgradeStructureTrigger: 32. By default a structure will upgrade to its next stage after 32 days. You can change this number, set it to an item or dimension name. This setting only changes the default value; edit the value(s) in HBStructuresConceptConfig.json to change it for each structure and stage.")
-        public String upgradeStructureTrigger = "32";
+        @Comment("Default upgradeStructureTrigger: custom. By default a structure will only upgrade by custom trigger (another mod or game command, see wiki for other triggers).")
+        public String upgradeStructureTrigger = "custom";
 
         @Comment("Default cycleStage: -1. A structure will 'cycle back' to this stage after its last stage")
         public int cycleStage = -1;
