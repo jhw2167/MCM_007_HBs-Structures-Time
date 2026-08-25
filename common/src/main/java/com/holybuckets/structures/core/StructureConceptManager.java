@@ -137,8 +137,8 @@ public class StructureConceptManager {
         }
     }
 
-    public void removeManagedChunk(String chunkId) {
-        managedChunks.remove(chunkId);
+    public void removeManagedChunk(ChunkPos chunkPos) {
+        managedChunks.remove(chunkPos);
     }
 
 

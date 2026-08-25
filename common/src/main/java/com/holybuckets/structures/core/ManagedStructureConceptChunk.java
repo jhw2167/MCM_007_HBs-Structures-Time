@@ -285,6 +285,29 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     }
 
     //** CORE
+    //generate default bounding box from top of the world to the bottom, -25% from both sides
+    private BoundingBox generateBox() {
+        int top = level.getMaxBuildHeight();
+        int bottom = level.getMinBuildHeight();
+        int height = top - bottom;
+        int shave = (int) (height * 0.25);
+        return new BoundingBox(
+            pos.getMinBlockX(), bottom + shave, pos.getMinBlockZ(),
+            pos.getMaxBlockX(), top - shave, pos.getMaxBlockZ()
+        );
+
+    }
+
+    private void regenerateStarts() throws StructureUpgradeRejectionException
+    {
+        Map<Structure, StructureStart> chunkStarts = chunk.getAllStarts();
+
+        Structure origin = MOD_CONFIG.structure(structureConcept.getSourceStructure());
+        StructureStart start = chunkStarts.getOrDefault(origin,
+            chunkStarts.values().stream().findAny().get());
+        if(start == null) throwUpgradeRejection(6);
+        generateStructureStarts(start);
+    }
 
     /**
      * For each stage, calls Structure::findValidGenerationPoint directly with a forced biome
@@ -296,16 +319,24 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     public void generateStructureStarts(StructureStart sStart) {
         if (level == null || structureConcept == null) return;
         if (chunk == null) chunk = getChunk();
-        if (chunk == null) return;
 
         Structure sourceStruct = MOD_CONFIG.structure(structureConcept.getSourceStructure());
-        if (sStart == null && sourceStruct != null) {
+        if( sourceStruct == null ) {
+            LoggerProject.logWarning("010001", "Source structure for concept "
+             + structureConcept.getStructureConceptId() + " is null");
+            return;
+        }
+        if (sStart==null && chunk != null) {
             sStart = chunk.getAllStarts().get(sourceStruct);
         }
-        //vanilla createReferences iterates getAllStarts().values() and calls isValid(),
-        //so a null start stored here becomes an NPE inside worldgen on a neighbouring chunk
-        if (sourceStruct != null && sStart != null) {
-            structureStarts.put(sourceStruct, sStart);
+        structureStarts.put(sourceStruct, sStart);
+        if(chunk==null) {
+            for(StructureConceptStage stage : structureConcept.getStages()) {
+                Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
+                if(s==null) continue;
+                structureStarts.put(s, sStart);
+            }
+            return; //chunk is still generating, but we got the start structure in there
         }
 
         ChunkGenerator generator = level.getChunkSource().getGenerator();
@@ -441,7 +472,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         {
             Structure prevStructure = MOD_CONFIG.structure(prevStructLoc);
             StructureStart prevStructureStart = structureStarts.get(prevStructure);
-            BoundingBox prevBox = prevStructureStart.getBoundingBox();
+            BoundingBox prevBox = generateBox();
+            if(prevStructureStart!=null)
+                prevBox = prevStructureStart.getBoundingBox();
+
             //copy the box but apply level.getMaxBuildHeight() as maxY
             prevBox = new BoundingBox(prevBox.minX(), prevBox.minY(), prevBox.minZ(),
                 prevBox.maxX(), level.getMaxBuildHeight(), prevBox.maxZ());
@@ -825,6 +859,29 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             throwUpgradeRejection(3);
         }
 
+        //check if all structureStarts are present
+        for (StructureConceptStage stage : structureConcept.getStages())
+        {
+            Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
+            if (s == null) continue;
+            if (!structureStarts.containsKey(s)) {
+                regenerateStarts();
+            }
+        }
+        if(currentStructure == null) {
+            currentStructure = MOD_CONFIG.structure(structureConcept.getStage(stage).getStructureLoc());
+        }
+        if(currentStructureStart==null)
+            currentStructureStart = structureStarts.get(currentStructure);
+
+        if(0 < stage) {
+            ResourceLocation loc = structureConcept.getStage(stage-1).getStructureLoc();
+            Structure previousStructure = MOD_CONFIG.structure(loc);
+            if(MOD_CONFIG.isEmptyStructure(previousStructure)) {}
+            else if(MOD_CONFIG.isSkipStructure(previousStructure)) {}
+            else if(!structureStarts.containsKey(previousStructure)) { regenerateStarts(); }
+        }
+
     }
 
         private void throwUpgradeRejection(int rejectCase) throws StructureUpgradeRejectionException
@@ -855,6 +912,10 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 upgradeRejectedStatus = 5;
                 msg = baseMessage + " chunk is not fully loaded.";
                 throw new StructureUpgradeRejectionException(msg,5);
+            case 6:
+                upgradeRejectedStatus = 6;
+                msg = baseMessage + " No source structures found; chunk is obsolete.";
+                throw new StructureUpgradeRejectionException(msg,6);
             default:
                 upgradeRejectedStatus = 0;
                 msg = baseMessage + " no structure data found.";
@@ -901,8 +962,12 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
     /** @return only starts for current stage */
     public Map<Structure, StructureStart> getCurrentStarts() {
         Map<Structure, StructureStart> structs = new HashMap<>();
-        if(currentStructure != null && structureStarts.get(currentStructure) != null)
-            structs.put(currentStructure, structureStarts.get(currentStructure));
+        if(currentStructure==null) {
+            ResourceLocation loc = structureConcept.getStage(stage).getStructureLoc();
+            currentStructure = MOD_CONFIG.structure(loc);
+        }
+        structs.put(currentStructure, structureStarts.get(currentStructure));
+
         return structs;
     }
 

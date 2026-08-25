@@ -157,7 +157,12 @@ public class ModConfig {
 
     @Nullable
     public static Structure getStructure(String resourceLocationStr) {
-        ResourceLocation loc = ResourceLocation.parse(resourceLocationStr);
+        ResourceLocation loc = getStructure(getInstance().registry, resourceLocationStr);
+        return getStructure(loc);
+    }
+
+    public static Structure getStructure(ResourceLocation loc) {
+        if(loc == null) return null;
         return ModConfig.getInstance().registry.get(loc);
     }
 
