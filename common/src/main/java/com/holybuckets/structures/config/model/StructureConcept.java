@@ -261,7 +261,7 @@ public class StructureConcept {
 
     /**
      * Returns the structureId for the given stage number, or null if the stage
-     * does not exist. Stage numbers are 1-indexed.
+     * does not exist. Stage numbers are 1-indexed. 0 references origin structure.
      */
     @Nullable
     public String getStructureIdForStage(int stageNumber) {

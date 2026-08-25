@@ -52,6 +52,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static com.holybuckets.structures.core.StructureConceptManager.MANAGERS;
 import static com.holybuckets.structures.core.StructureConceptManager.StructureSetStartContext;
 
 import static com.holybuckets.foundation.HBUtil.*;
@@ -330,14 +331,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             sStart = chunk.getAllStarts().get(sourceStruct);
         }
         structureStarts.put(sourceStruct, sStart);
-        if(chunk==null) {
-            for(StructureConceptStage stage : structureConcept.getStages()) {
-                Structure s = MOD_CONFIG.structure(stage.getStructureLoc());
-                if(s==null) continue;
-                structureStarts.put(s, sStart);
-            }
-            return; //chunk is still generating, but we got the start structure in there
-        }
 
         ChunkGenerator generator = level.getChunkSource().getGenerator();
         RandomState randomState = level.getChunkSource().randomState();
@@ -1025,6 +1018,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
          "\nChunk: %s" +
          "\nPosition: %s" +
          "\nCurrent Stage: %d" +
+         "\nCurrent Structure: %s" +
          "\nPending Upgrade: %s" +
           "\nNext upgrade trigger: %s" +
           "\nNext structure: %s" +
@@ -1035,6 +1029,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
             id,
             BlockUtil.positionToString( pos.getWorldPosition() ),
             stage,
+            (structureConcept.getStructureIdForStage(stage)==null) ? "N/A" : structureConcept.getStructureIdForStage(stage),
             phase.toString(),
             upgradeTrigger,
             nextStructureId,
@@ -1125,6 +1120,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         if (chunk != null) return chunk;
         if (getParent() != null) {
             chunk = getParent().getCachedLevelChunk();
+            if(chunk!=null) MANAGERS.get(level.dimension()).removeCachedProtochunk(pos);
             return chunk;
         }
         return null;

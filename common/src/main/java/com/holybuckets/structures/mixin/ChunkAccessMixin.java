@@ -53,9 +53,7 @@ public abstract class ChunkAccessMixin {
         }
 
         ((ChunkAccess) (Object) this).setAllStarts(filtered);
-        manager.removeCachedProtochunk(me);
         cir.setReturnValue(Collections.unmodifiableMap(filtered));
-
         }
 
 

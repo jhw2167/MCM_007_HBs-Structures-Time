@@ -272,6 +272,12 @@ public class ChunkRegenerator {
         DUMMY_TEMP_DIR = null;
         DUMMY_SERVER = null;
 
+        if(dummy!=null) {
+            StructureConceptManager manager = StructureConceptManager.get(dummy);
+            CACHE_KEYS.forEach(manager::removeCachedProtochunk);
+        }
+
+
         if (dummy != null) {
             try { dummy.close(); }
             catch (Exception e) { LoggerProject.logWarning(CLASS_ID + "026",
@@ -493,7 +499,7 @@ public class ChunkRegenerator {
     public static void finish() {
         PADDED_TARGETS = new LinkedHashSet<>();
         shutdownDummyLevel();
-        clearCache(new HashSet<>(CACHE_KEYS));
+        clearCache(CACHE_KEYS);
     }
 
 

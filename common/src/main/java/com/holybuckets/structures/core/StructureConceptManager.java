@@ -70,7 +70,7 @@ public class StructureConceptManager {
 
     private final ServerLevel level;
     private final Registry<Structure> registry;
-    private final Set<ChunkAccess> protochunkCache;
+    private final Map<ChunkPos, ChunkAccess> protochunkCache;
     private final Map<ChunkPos, ManagedStructureConceptChunk> managedChunks;
     private final Map<EntityType<?>, Set<ManagedStructureConceptChunk>> mobTrackingChunks = new ConcurrentHashMap<>();
     private static int globalStage=0;
@@ -92,7 +92,7 @@ public class StructureConceptManager {
         this.registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         //written from worldgen worker threads, iterated on the server thread
         this.managedChunks = new ConcurrentHashMap<>();
-        this.protochunkCache = ConcurrentHashMap.newKeySet();
+        this.protochunkCache = new ConcurrentHashMap<>();
         LoggerProject.logInit("011000", StructureConceptManager.class.getName());
     }
 
@@ -243,7 +243,8 @@ public class StructureConceptManager {
         ManagedStructureConceptChunk managed = new ManagedStructureConceptChunk(
         level, cp, ctx, globalStage);
         managedChunks.put(cp, managed);
-        if (ctx.structureAccess instanceof ChunkAccess ca) protochunkCache.add(ca);
+        if (ctx.structureAccess instanceof ChunkAccess ca)
+            protochunkCache.put(cp, ca);
 
 
         LoggerProject.logDebug("011020", "Registered timed structure chunk: " + cp);
@@ -720,7 +721,7 @@ public class StructureConceptManager {
         if(me instanceof LevelChunk) return null;
 
         for(StructureConceptManager manager : MANAGERS.values()) {
-            if(manager.protochunkCache.contains(me)) return manager;
+            if(manager.protochunkCache.containsKey(me.getPos()) ) return manager;
         }
         if(ChunkRegenerator.cacheContains(me)) {
             Level lvl = ChunkRegenerator.getVirtualLevel();
@@ -729,8 +730,8 @@ public class StructureConceptManager {
         return null;
     }
 
-    public void removeCachedProtochunk(ChunkAccess me) {
-        protochunkCache.remove(me);
+    public void removeCachedProtochunk(ChunkPos pos) {
+        protochunkCache.remove(pos);
     }
 
 
