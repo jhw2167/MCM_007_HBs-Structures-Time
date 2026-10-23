@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <bytecodeTargetLevel target="21" />
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="MCM_007_HBs-Structures-Time.fabric" options="-AoutRefMapFile=C:\Users\jack\source\repos\Java\Minecraft\00_mod-dev\MCM_007_HBs-Structures-Time\fabric\build\classes\java\main\hbs_structures.refmap.json -AdefaultObfuscationEnv=named:intermediary -Aquiet=true -AoutMapFileNamedIntermediary=C:\Users\jack\source\repos\Java\Minecraft\00_mod-dev\MCM_007_HBs-Structures-Time\fabric\build\loom-cache\mixin-map-loom.mappings.1_21_1.layered+hash.1010942874-v2.main.tiny -AinMapFileNamedIntermediary=C:\Users\jack\.gradle\caches\fabric-loom\1.21.1\loom.mappings.1_21_1.layered+hash.1010942874-v2\mappings.tiny" />
+      <module name="MCM_007_HBs-Structures-Time.fabric.main" options="-AoutRefMapFile=C:\Users\jack\source\repos\Java\Minecraft\00_mod-dev\MCM_007_HBs-Structures-Time\fabric\build\classes\java\main\hbs_structures.refmap.json -AdefaultObfuscationEnv=named:intermediary -Aquiet=true -AoutMapFileNamedIntermediary=C:\Users\jack\source\repos\Java\Minecraft\00_mod-dev\MCM_007_HBs-Structures-Time\fabric\build\loom-cache\mixin-map-loom.mappings.1_21_1.layered+hash.1010942874-v2.main.tiny -AinMapFileNamedIntermediary=C:\Users\jack\.gradle\caches\fabric-loom\1.21.1\loom.mappings.1_21_1.layered+hash.1010942874-v2\mappings.tiny" />
+      <module name="MCM_007_HBs-Structures-Time.fabric.test" options="-AoutRefMapFile=C:\Users\jack\source\repos\Java\Minecraft\00_mod-dev\MCM_007_HBs-Structures-Time\fabric\build\classes\java\test\test-hbs_structures.refmap.json -AdefaultObfuscationEnv=named:intermediary -Aquiet=true -AoutMapFileNamedIntermediary=C:\Users\jack\source\repos\Java\Minecraft\00_mod-dev\MCM_007_HBs-Structures-Time\fabric\build\loom-cache\mixin-map-loom.mappings.1_21_1.layered+hash.1010942874-v2.test.tiny -AinMapFileNamedIntermediary=C:\Users\jack\.gradle\caches\fabric-loom\1.21.1\loom.mappings.1_21_1.layered+hash.1010942874-v2\mappings.tiny" />
+    </option>
+  </component>
+</project>
