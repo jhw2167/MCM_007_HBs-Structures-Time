@@ -64,6 +64,46 @@ public class StructureConceptAPI {
     }
 
 
+    /**
+     * Advances one managed structure to its next stage. Intended for custom upgrade
+     * stages driven by another mod. Unlike forceUpgradeStructure this does not move the
+     * concept's global stage, so only the structure at this chunk changes.
+     *
+     * @return true if the upgrade was queued
+     */
+    public boolean triggerCustomUpgrade(ChunkPos chunkPos) {
+        return triggerCustomUpgrade(chunkPos, false);
+    }
+
+    /**
+     * @param force skip the concept's upgrade rejection checks
+     */
+    public boolean triggerCustomUpgrade(ChunkPos chunkPos, boolean force)
+    {
+        if(manager == null || chunkPos == null) return false;
+        var managedChunk = manager.getManagedChunk(chunkPos);
+        if(managedChunk == null) return false;
+
+        StructureConcept concept = managedChunk.getStructureConcept();
+        if(concept == null) return false;
+
+        int newStage = managedChunk.getstage() + 1;
+        if(newStage > concept.getMaxStage() && concept.getCycleStage() == -1) return false;
+
+        managedChunk.triggerStructureUpgrade(newStage, force);
+        return true;
+    }
+
+    /** True if the next stage for this structure has no automatic trigger. */
+    public boolean isCustomUpgradeStage(ChunkPos chunkPos) {
+        if(manager == null || chunkPos == null) return false;
+        var managedChunk = manager.getManagedChunk(chunkPos);
+        if(managedChunk == null) return false;
+        StructureConcept concept = managedChunk.getStructureConcept();
+        if(concept == null) return false;
+        return concept.isCustomUpgradeStage(managedChunk.getstage() + 1);
+    }
+
     public List<ManagedStructureConceptChunk> getStructuresNearPoint(BlockPos pos) {
         return getStructuresNearPoint(pos, null, 5);
     }

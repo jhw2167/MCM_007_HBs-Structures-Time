@@ -161,6 +161,12 @@ public class StructureConcept {
     private static final String INVALID_TRIGGER = "Trigger '%s' is neither an integer (days), an item, or a dimension name. Reverting to default structure upgrade trigger.";
     private static final String CRASHOUT = "The default structure upgrade trigger is not a valid integer, item or dimension. Please edit hbs_structures-common to set a valid default trigger.";
 
+    /** True when the stage has no automatic trigger and advances only through the API. */
+    public boolean isCustomUpgradeStage(int s) {
+        StructureConceptStage stage = getStage(s);
+        return stage == null || stage.isCustomUpgrade();
+    }
+
     @Nullable
     public Item getStructureUpgradeItem(int s) {
         StructureConceptStage stage = getStage(s);

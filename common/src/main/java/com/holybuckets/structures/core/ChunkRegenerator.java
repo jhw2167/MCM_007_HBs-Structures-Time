@@ -29,6 +29,8 @@ import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 
 import java.util.*;
@@ -242,6 +244,7 @@ public class ChunkRegenerator {
         if (proto == null) return;
 
         LevelChunk live = level.getChunk(pos.x, pos.z);
+        removeNonLivingEntities(level, area);
         copySections(proto, live, area);
         live.setUnsaved(true);
         notifyClients(level, live, area);
@@ -250,6 +253,25 @@ public class ChunkRegenerator {
         lootPos.addAll(proto.getBlockEntitiesPos().stream()
             .filter(area::isInside)
             .collect(Collectors.toList()));
+    }
+
+
+    /**
+     * Discards every non-living entity inside the area about to be overwritten.
+     * Item frames, paintings, armor stands and minecarts break when the blocks they
+     * are attached to are replaced underneath them. Living entities are left alone,
+     * they are handled by the stage's removeEntitiesAfterStage toggle.
+     */
+    private static void removeNonLivingEntities(ServerLevel level, BoundingBox area) {
+        if (level == null || area == null || level.isClientSide()) return;
+
+        List<Entity> doomed = level.getEntitiesOfClass(Entity.class, AABB.of(area),
+            e -> !(e instanceof LivingEntity));
+        if (doomed.isEmpty()) return;
+
+        for (Entity e : doomed) e.discard();
+        LoggerProject.logDebug(CLASS_ID + "030", "Discarded " + doomed.size()
+            + " non-living entities before overwriting " + area);
     }
 
     // Copies block state data from the scratch ProtoChunk into the live LevelChunk, bounded by region.

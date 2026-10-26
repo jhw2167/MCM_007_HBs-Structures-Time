@@ -13,6 +13,7 @@ import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
+import java.util.Map;
 
 public class StructureConceptStage {
 
@@ -142,6 +143,26 @@ public class StructureConceptStage {
     public void setRemoveEntitiesAfterStage(boolean v) { this.removeEntitiesAfterStage = v; }
 
     /** Resolves the raw trigger strings into their typed values; called at beforeServerStarted. */
+    public static final String CUSTOM_TRIGGER = "custom";
+
+    /**
+     * True when no automatic trigger is configured for this stage, so it advances only
+     * through the API. Either declared with upgradeStructureTrigger "custom", or implied
+     * by leaving every typed trigger field blank.
+     */
+    public boolean isCustomUpgrade() {
+        if (CUSTOM_TRIGGER.equalsIgnoreCase(trimOrEmpty(upgradeStructureTrigger))) return true;
+        return upgradeStructureOnItemTrigger == null
+            && upgradeStructureOnDimensionTrigger == null
+            && upgradeStructureOnDayCount == null
+            && upgradeStructureOnDayCycle == null
+            && isEmpty(upgradeStructureOnMobsKilled)
+            && isEmpty(upgradeStructureOnTotalEntities);
+    }
+
+    private static String trimOrEmpty(String v) { return v == null ? "" : v.trim(); }
+    private static boolean isEmpty(Map<?, ?> m) { return m == null || m.isEmpty(); }
+
     public void hydrateTriggers()
     {
         if (notBlank(upgradeStructureOnItemTriggerRaw))

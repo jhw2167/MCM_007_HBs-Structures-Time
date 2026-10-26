@@ -8,6 +8,8 @@ import com.holybuckets.foundation.event.custom.ServerTickEvent;
 import com.holybuckets.foundation.model.ManagedChunk;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
 import com.holybuckets.foundation.modelInterface.IMangedChunkData;
+import com.holybuckets.foundation.structure.StructureAPI;
+import com.holybuckets.foundation.structure.StructureInfo;
 import com.holybuckets.foundation.structure.StructureManager;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.StructuresOverTimeMain;
@@ -617,10 +619,6 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
                 if(currentStructure != null && currentStructureStart != null) {
                     chunk.setStartForStructure(currentStructure, currentStructureStart);
                     chunk.addReferenceForStructure(currentStructure, currentStructureStart.getChunkPos().toLong());
-
-                    StructureManager structureManager = StructureManager.get(level);
-                    if(structureManager != null)
-                        structureManager.processStructureLoad(currentStructure, currentStructureStart);
                 }
 
                 break;
@@ -628,12 +626,13 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
         }
     }
 
+
     private BoundingBox getAreaForChunk(ChunkPos cp) {
         int minY = currentBox.minY();
         int maxY = currentBox.maxY();
         if (previousbox != null) {
-            minY = previousbox.minY();
-            maxY = previousbox.maxY();
+            minY = Math.min(minY, previousbox.minY());
+            maxY = Math.max(maxY, previousbox.maxY());
         }
 
         return new BoundingBox(
@@ -657,7 +656,7 @@ public class ManagedStructureConceptChunk implements IMangedChunkData {
 
         List<String> localChunks = HBUtil.ChunkUtil.getLocalChunkIds(pos, 5);
         boolean allLoaded = localChunks.stream().allMatch(id -> {
-            return util.getManagedChunk(id)!=null && util.getManagedChunk(id).getCachedLevelChunk() instanceof LevelChunk;
+            return util.getManagedChunk(id).getCachedLevelChunk() != null;
         });
         if (!allLoaded) return false;
         List<ChunkAccess> chunks = localChunks.stream()

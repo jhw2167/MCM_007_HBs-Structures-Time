@@ -13,6 +13,7 @@ import com.holybuckets.foundation.event.custom.TickType;
 import com.google.gson.JsonPrimitive;
 import com.holybuckets.foundation.datastore.WorldSaveData;
 import com.holybuckets.foundation.model.ManagedChunkUtility;
+import com.holybuckets.structures.config.model.StructureConceptStage;
 import com.holybuckets.structures.Constants;
 import com.holybuckets.structures.LoggerProject;
 import com.holybuckets.structures.config.ModConfig;
@@ -285,6 +286,8 @@ public class StructureConceptManager {
         {
             conceptStages.put(concept, pendingStageUpgrades.get(concept));
             int nextStage = pendingStageUpgrades.remove(concept) + 1;
+            com.holybuckets.foundation.structure.StructureManager
+                .structureUpgraded(concept.getStructureConceptId(), nextStage);
             setNextUpgradeTrigger(concept, nextStage);
 
             //check unqiue stage
@@ -309,6 +312,11 @@ public class StructureConceptManager {
 
     private static void setNextUpgradeTrigger(StructureConcept concept, int nextStage)
     {
+        if(concept.isCustomUpgradeStage(nextStage)) {
+            LoggerProject.logDebug("011021", "Stage " + nextStage + " of concept "
+                + concept.getStructureConceptId() + " is a custom upgrade, awaiting API call");
+            return;
+        }
         if(concept.getStructureUpgradeItem(nextStage) != null)
         {
             EventRegistrar.getInstance().runtimeOnPlayerHasItem(
@@ -568,6 +576,35 @@ public class StructureConceptManager {
         ManagedStructureConceptChunk.GENERAL_CONFIG = GeneralConfig.getInstance();
         ManagedStructureConceptChunk.MOD_CONFIG = ModConfig.getInstance();
 
+        publishStructureConcepts();
+    }
+
+    //BACKWARDS COMPAT with Foundations to communicate the fact that these strutures can
+    //unpgrade and what they can upgrade into
+    private static void publishStructureConcepts()
+    {
+        Map<String, ResourceLocation[]> conceptStages = new HashMap<>();
+
+        for (StructureConcept concept : MOD_CONFIG.getConcepts())
+        {
+            String conceptId = concept.getStructureConceptId();
+            ResourceLocation source = concept.getSourceStructure();
+            if (conceptId == null || source == null) continue;
+
+            int maxStage = concept.getMaxStage();
+            ResourceLocation[] stages = new ResourceLocation[maxStage + 1];
+            for (int i = 0; i <= maxStage; i++) {
+                StructureConceptStage s = concept.getStage(i);
+                if(s==null) {
+                    stages[i] = ModConfig.SKIP_STRUCTURE_LOC;
+                } else {
+                    stages[i] = s.getStructureLoc();
+                }
+            }
+            conceptStages.put(conceptId, stages);
+        }
+
+        com.holybuckets.foundation.structure.StructureManager.setAllStructureConcepts(conceptStages);
     }
 
     private static void onServerStopped(ServerStoppedEvent event) {
@@ -679,8 +716,6 @@ public class StructureConceptManager {
 
     /**
      * Gets structure starts from ManagedChunk before ManagedChunk had access to levelChunk
-     * @param chunkPos
-     * @return
      */
     public Map<? extends Structure, StructureStart> getInitialStarts(ChunkPos chunkPos) {
         if(!managedChunks.containsKey(chunkPos)) return Collections.emptyMap();
